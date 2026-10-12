@@ -7,89 +7,89 @@ skinparam usecase {
   BackgroundColor #7FD1F5
 }
 
-actor Klient
-actor "Administrator\nbanku" as Admin
+actor Customer
+actor "Bank\nAdministrator" as Admin
 actor Scheduler
-actor "BIK" as BIK <<system zewnętrzny>>
+actor "BIK" as BIK <<external system>>
 
-rectangle "System bankowy" {
-  usecase "Załóż konto" as UC_ZalozKonto
-  usecase "Załóż lokatę" as UC_ZalozLokate
-  usecase "Zlikwiduj konto" as UC_ZlikwidujKonto
-  usecase "Zlikwiduj lokatę" as UC_ZlikwidujLokate
-  usecase "Sprawdź stan konta" as UC_StanKonta
-  usecase "Sprawdź historię\ntransakcji" as UC_Historia
-  usecase "Wpłać pieniądze" as UC_Wplac
-  usecase "Wypłać pieniądze" as UC_Wyplac
+rectangle "Banking System" {
+  usecase "Open account" as UC_OpenAccount
+  usecase "Open deposit" as UC_OpenDeposit
+  usecase "Close account" as UC_CloseAccount
+  usecase "Close deposit" as UC_CloseDeposit
+  usecase "Check account balance" as UC_AccountBalance
+  usecase "Check transaction\nhistory" as UC_History
+  usecase "Deposit money" as UC_Deposit
+  usecase "Withdraw money" as UC_Withdraw
 
-  usecase "Zleć przelew" as UC_Przelew
-  usecase "Zleć przelew\njednorazowy" as UC_PrzelewJednorazowy
-  usecase "Zleć przelew\nstały" as UC_PrzelewStaly
-  usecase "Wykonaj zaplanowane\nprzelewy" as UC_Zaplanowane
-  usecase "Zapłać za zakupy\nonline" as UC_PlatnoscOnline
-  usecase "Zapłać w lokalnej\nwalucie" as UC_PlatnoscLokalna
-  usecase "Zapłać z\nprzewalutowaniem" as UC_PlatnoscPrzewalutowanie
-  usecase "Pobierz kurs waluty" as UC_PobierzKurs
-  usecase "Ustal limity\ntransakcji" as UC_Limity
+  usecase "Order transfer" as UC_Transfer
+  usecase "Order one-time\ntransfer" as UC_OneTimeTransfer
+  usecase "Order standing\ntransfer" as UC_StandingTransfer
+  usecase "Execute scheduled\ntransfers" as UC_ScheduledTransfers
+  usecase "Pay for online\npurchases" as UC_OnlinePayment
+  usecase "Pay in local\ncurrency" as UC_LocalCurrencyPayment
+  usecase "Pay with\ncurrency conversion" as UC_ConversionPayment
+  usecase "Get exchange rate" as UC_GetExchangeRate
+  usecase "Set transaction\nlimits" as UC_Limits
 
-  usecase "Złóż wniosek o wydanie\nkarty płatniczej" as UC_WniosekKarta
-  usecase "Zablokuj kartę" as UC_BlokadaKarty
-  usecase "Złóż wniosek o kredyt" as UC_WniosekKredyt
-  usecase "Oceń zdolność\nkredytową" as UC_Zdolnosc
-  usecase "Spłać kredyt" as UC_SplataKredytu
-  usecase "Udziel pełnomocnictwa" as UC_Pelnomocnictwo
-  usecase "Odwołaj pełnomocnictwo" as UC_OdwolajPelnomocnictwo
+  usecase "Submit payment card\napplication" as UC_CardApplication
+  usecase "Block card" as UC_BlockCard
+  usecase "Submit loan application" as UC_LoanApplication
+  usecase "Assess credit\nworthiness" as UC_CreditWorthiness
+  usecase "Repay loan" as UC_RepayLoan
+  usecase "Grant power of attorney" as UC_GrantPoA
+  usecase "Revoke power of attorney" as UC_RevokePoA
 
-  usecase "Rozpatrz wniosek" as UC_Rozpatrz
-  usecase "Rozpatrz wniosek\no kartę" as UC_RozpatrzKarta
-  usecase "Rozpatrz wniosek\no kredyt" as UC_RozpatrzKredyt
-  usecase "Ustal kursy walut" as UC_Kursy
-  usecase "Przeglądaj historię\ntransakcji klienta" as UC_HistoriaKlienta
+  usecase "Process application" as UC_ProcessApplication
+  usecase "Process card\napplication" as UC_ProcessCardApplication
+  usecase "Process loan\napplication" as UC_ProcessLoanApplication
+  usecase "Set exchange rates" as UC_SetRates
+  usecase "Browse customer\ntransaction history" as UC_CustomerHistory
 }
 
-Klient -- UC_ZalozKonto
-Klient -- UC_ZalozLokate
-Klient -- UC_ZlikwidujKonto
-Klient -- UC_ZlikwidujLokate
-Klient -- UC_StanKonta
-Klient -- UC_Historia
-Klient -- UC_Wplac
-Klient -- UC_Wyplac
-Klient -- UC_Przelew
-Klient -- UC_PlatnoscOnline
-Klient -- UC_Limity
-Klient -- UC_WniosekKarta
-Klient -- UC_BlokadaKarty
-Klient -- UC_WniosekKredyt
-Klient -- UC_SplataKredytu
-Klient -- UC_Pelnomocnictwo
-Klient -- UC_OdwolajPelnomocnictwo
+Customer -- UC_OpenAccount
+Customer -- UC_OpenDeposit
+Customer -- UC_CloseAccount
+Customer -- UC_CloseDeposit
+Customer -- UC_AccountBalance
+Customer -- UC_History
+Customer -- UC_Deposit
+Customer -- UC_Withdraw
+Customer -- UC_Transfer
+Customer -- UC_OnlinePayment
+Customer -- UC_Limits
+Customer -- UC_CardApplication
+Customer -- UC_BlockCard
+Customer -- UC_LoanApplication
+Customer -- UC_RepayLoan
+Customer -- UC_GrantPoA
+Customer -- UC_RevokePoA
 
-UC_Przelew <|-- UC_PrzelewJednorazowy
-UC_Przelew <|-- UC_PrzelewStaly
-UC_PlatnoscOnline <|-- UC_PlatnoscLokalna
-UC_PlatnoscOnline <|-- UC_PlatnoscPrzewalutowanie
+UC_Transfer <|-- UC_OneTimeTransfer
+UC_Transfer <|-- UC_StandingTransfer
+UC_OnlinePayment <|-- UC_LocalCurrencyPayment
+UC_OnlinePayment <|-- UC_ConversionPayment
 
-UC_WniosekKredyt ..> UC_Zdolnosc : <<include>>
-UC_PlatnoscPrzewalutowanie ..> UC_PobierzKurs : <<include>>
+UC_LoanApplication ..> UC_CreditWorthiness : <<include>>
+UC_ConversionPayment ..> UC_GetExchangeRate : <<include>>
 
-UC_RozpatrzKarta --|> UC_Rozpatrz
-UC_RozpatrzKredyt --|> UC_Rozpatrz
+UC_ProcessCardApplication --|> UC_ProcessApplication
+UC_ProcessLoanApplication --|> UC_ProcessApplication
 
-UC_PrzelewStaly <.. UC_Zaplanowane : realizuje zlecenia
+UC_StandingTransfer <.. UC_ScheduledTransfers : fulfils orders
 
-UC_Zaplanowane -- Scheduler
-UC_Zdolnosc -- BIK
-UC_Rozpatrz -- Admin
-UC_Kursy -- Admin
-UC_HistoriaKlienta -- Admin
+UC_ScheduledTransfers -- Scheduler
+UC_CreditWorthiness -- BIK
+UC_ProcessApplication -- Admin
+UC_SetRates -- Admin
+UC_CustomerHistory -- Admin
 
-UC_Wyplac -[hidden]- UC_RozpatrzKarta
-UC_Wyplac -[hidden]- UC_RozpatrzKredyt
-UC_Wyplac -[hidden]- UC_Kursy
-UC_Wyplac -[hidden]- UC_HistoriaKlienta
-UC_RozpatrzKarta -[hidden]- UC_Kursy
-UC_RozpatrzKarta -[hidden]- UC_HistoriaKlienta
-UC_PobierzKurs -[hidden]- BIK
+UC_Withdraw -[hidden]- UC_ProcessCardApplication
+UC_Withdraw -[hidden]- UC_ProcessLoanApplication
+UC_Withdraw -[hidden]- UC_SetRates
+UC_Withdraw -[hidden]- UC_CustomerHistory
+UC_ProcessCardApplication -[hidden]- UC_SetRates
+UC_ProcessCardApplication -[hidden]- UC_CustomerHistory
+UC_GetExchangeRate -[hidden]- BIK
 
 @enduml
