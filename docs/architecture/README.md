@@ -1,1 +1,0 @@
-To create this architecture diagram I used [Draw.io](https://app.diagrams.net/). You can get the schema from my [cloud](https://drive.google.com/file/d/1Dm3xp2BRIbZl1H4UAYgxL3AbIjLhBZb6/view?usp=drive_link)
