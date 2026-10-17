@@ -35,6 +35,7 @@ CREATE TABLE "addresses" (
 CREATE TABLE "accounts" (
   "id" uuid PRIMARY KEY,
   "user_id" uuid,
+  "balance" numeric(18,4) NOT NULL DEFAULT 0,  
   "currency_code" varchar(3) NOT NULL,
   "account_number" varchar(34) UNIQUE NOT NULL,
   "account_type" varchar(20) NOT NULL,
@@ -43,7 +44,8 @@ CREATE TABLE "accounts" (
   CONSTRAINT uq_accounts_id_currency UNIQUE ("id", "currency_code"),
   CONSTRAINT chk_account_type CHECK ("account_type" IN ('CUSTOMER' ,'INTERNAL')),
   CONSTRAINT chk_account_status CHECK ("status" IN ('ACTIVE','CLOSED')),
-  CONSTRAINT chk_account_owner CHECK (("user_id" IS NULL) = ("account_type" = 'INTERNAL'))
+  CONSTRAINT chk_account_owner CHECK (("user_id" IS NULL) = ("account_type" = 'INTERNAL')),
+  CONSTRAINT chk_balance CHECK ("account_type" = 'INTERNAL' OR "balance" >= 0)
 );
 
 CREATE TABLE "transactions" (
@@ -159,3 +161,37 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_ledger_no_change
   BEFORE UPDATE OR DELETE ON ledger
   FOR EACH ROW EXECUTE FUNCTION ledger_immutable();
+
+
+CREATE FUNCTION ledger_apply_to_balance() RETURNS trigger AS $$
+BEGIN
+  UPDATE accounts
+     SET balance = balance + CASE NEW.entry_type
+                               WHEN 'CREDIT' THEN NEW.amount
+                               ELSE -NEW.amount END
+   WHERE id = NEW.account_id;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_ledger_apply_balance
+  AFTER INSERT ON ledger
+  FOR EACH ROW EXECUTE FUNCTION ledger_apply_to_balance();
+
+CREATE FUNCTION accounts_balance_guard() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.balance <> 0 THEN
+    RAISE EXCEPTION 'new account must start with balance 0';
+  END IF;
+  IF TG_OP = 'UPDATE'
+     AND NEW.balance IS DISTINCT FROM OLD.balance
+     AND pg_trigger_depth() < 2 THEN
+    RAISE EXCEPTION 'balance can only be changed through the ledger';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_accounts_balance_guard
+  BEFORE INSERT OR UPDATE ON accounts
+  FOR EACH ROW EXECUTE FUNCTION accounts_balance_guard();
