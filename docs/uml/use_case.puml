@@ -23,6 +23,7 @@ rectangle "Banking System" {
   usecase "Order transfer" as UC_Transfer
   usecase "Order one-time\ntransfer" as UC_OneTimeTransfer
   usecase "Order standing\ntransfer" as UC_StandingTransfer
+  usecase "Cancel standing\ntransfer" as UC_CancelStandingTransfer
   usecase "Convert currency" as UC_ConversionTransfer
   usecase "Execute scheduled\ntransfers" as UC_ScheduledTransfers
   usecase "Check exchange rate" as UC_GetExchangeRate
@@ -41,6 +42,7 @@ Customer -- UC_Deposit
 Customer -- UC_Withdraw
 Customer -- UC_RequestReversal
 Customer -- UC_Transfer
+Customer -- UC_CancelStandingTransfer
 Customer -- UC_GetExchangeRate
 
 UC_Transfer <|-- UC_OneTimeTransfer
@@ -49,6 +51,7 @@ UC_Transfer <.. UC_ConversionTransfer : <<extend>>
 
 UC_StandingTransfer <.. UC_ScheduledTransfers : fulfils orders
 UC_GetExchangeRate <.. UC_ConversionTransfer : <<include>>
+UC_CancelStandingTransfer ..> UC_StandingTransfer : <<extend>>
 
 UC_ScheduledTransfers -- Scheduler
 
