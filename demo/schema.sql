@@ -7,6 +7,7 @@ CREATE TABLE "currencies" (
 
 CREATE TABLE "users" (
   "id" uuid PRIMARY KEY,
+  "client_number" varchar(10) UNIQUE NOT NULL,
   "pesel" varchar(11) UNIQUE NOT NULL,
   "first_name" varchar(100) NOT NULL,
   "last_name" varchar(100) NOT NULL,
@@ -26,10 +27,11 @@ CREATE TABLE "addresses" (
   "street" varchar(150),
   "building_number" varchar(15) NOT NULL,
   "apartment_number" varchar(15),
-  "postal_code" varchar(10) NOT NULL,
+  "postal_code" varchar(10),
   "city" varchar(100) NOT NULL,
   "country" varchar(2) NOT NULL DEFAULT 'PL',
-  "created_at" timestamp NOT NULL DEFAULT (now())
+  "created_at" timestamp NOT NULL DEFAULT (now()),
+  CONSTRAINT chk_postal_code_pl CHECK ("country" <> 'PL' OR "postal_code" ~ '^[0-9]{2}-[0-9]{3}$')
 );
 
 CREATE TABLE "accounts" (

@@ -23,4 +23,3 @@ def create_customer_account(pesel: str, number: str) -> None:
     except Exception as e:
         print("Error: internal account was not created!", e)
 
-        
