@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass, field
-from striped_type import StripedType
+from .striped_type import StripedType
 
 _EMAIL_RE = re.compile(
     r"[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}"

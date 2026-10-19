@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
-from striped_type import StripedType
+from .striped_type import StripedType
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
-
 
 _MIN_LENGTH = 10
 _MAX_LENGTH = 128

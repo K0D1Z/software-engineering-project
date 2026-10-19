@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from striped_type import StripedType
+from .striped_type import StripedType
 
 _MAX_LENGTH = 100
 _NAME_RE = re.compile(r"[^\W\d_]+(?:[ '\-][^\W\d_]+)*")

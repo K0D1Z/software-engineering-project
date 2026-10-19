@@ -1,17 +1,17 @@
 from connection.connection import Connection
 import psycopg
 from dataclasses import dataclass
-from domain_types import AccountNumber
-from decimal import Decimal
+from domain_types import AccountNumber, MoneyAmount
 from uuid import uuid4
 
 @dataclass(slots=True)
 class Transfer():
     acount_number_source: AccountNumber
     acount_number_target: AccountNumber
-    amount: Decimal
+    amount: MoneyAmount
 
     def execute(self):
+        #TODO check is active
         SQL: str = """
         WITH tx AS (
         INSERT INTO transactions (id, reference_number, description)
@@ -28,9 +28,9 @@ class Transfer():
         
         try:
             with Connection() as conn:
-                cur = conn.execute(SQL, {"ref": f"TRF-{uuid4()}", "amount": self.amount, 
-                                        "src": self.acount_number_source, 
-                                        "dst": self.acount_number_target})            
+                cur = conn.execute(SQL, {"ref": f"TRF-{uuid4()}", "amount": self.amount.value(), 
+                                        "src": self.acount_number_source.value(), 
+                                        "dst": self.acount_number_target.value()})            
                 if cur.rowcount != 2:
                     raise ValueError("Source or target account not found")
             print("Transfer finished successfully!")

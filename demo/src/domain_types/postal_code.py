@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass, field
-from striped_type import StripedType
+from .striped_type import StripedType
 
 _POSTAL_CODE_RE = re.compile(r"[0-9]{2}-[0-9]{3}")
 

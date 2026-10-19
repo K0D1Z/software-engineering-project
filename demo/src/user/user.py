@@ -1,26 +1,43 @@
 from dataclasses import dataclass, field
-from connection import Connection
+from connection.connection import Connection
 import psycopg
+import secrets
 from domain_types import *
 
 
+CLIENT_NUMBER_LENGTH = 8
+MAX_NUMBER_ATTEMPTS = 10
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class User():
-    def check_if_user_exist(self, pesel: str) -> bool:
+    client_number: ClientNumber = field(init=False)
+
+    def _check_if_user_exist(self, pesel: str, conn) -> bool:
         SQL="""SELECT EXISTS (SELECT 1 FROM users
         WHERE pesel = %s);"""
-        with Connection() as conn:
-            exist = conn.execute(SQL, (pesel,)).fetchone()[0]
+        exist = conn.execute(SQL, (pesel,)).fetchone()[0]
         return exist
+
+    def _choose_client_number(self, conn) -> ClientNumber:
+        """Draw random client numbers until one is not used in the database."""
+        for _ in range(MAX_NUMBER_ATTEMPTS):
+            candidate = str(secrets.randbelow(10 ** CLIENT_NUMBER_LENGTH)).zfill(CLIENT_NUMBER_LENGTH)
+            taken = conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM users WHERE client_number = %(number)s);",
+                {"number": candidate},
+            ).fetchone()[0]
+            if not taken:
+                return ClientNumber(candidate)
+        raise RuntimeError("Could not find a free client number")
 
     def create(self, pesel: Pesel, first_name: Name, last_name: Name, email: Email, phone_number: Phone ,password: Password, adress_type: AddressType | None,
                street: Street | None, building_number : AddressNumber, apartment_number : AddressNumber | None, postal_code : PostalCode,
-               city: City, country: CountryCode):
+               city: City, country: CountryCode) -> ClientNumber:
         SQL="""WITH new_user AS (
-                INSERT INTO users (id, pesel, first_name, last_name, email, phone_number, password_hash)
+                INSERT INTO users (id, client_number, pesel, first_name, last_name, email, phone_number, password_hash)
                 VALUES (
                     gen_random_uuid(),
+                    %(client_number)s,
                     %(pesel)s,
                     %(first_name)s,
                     %(last_name)s,
@@ -30,12 +47,12 @@ class User():
                 )
                 RETURNING id
                 )
-                INSERT INTO addresses (id, user_id, street, building_number, apartment_number, postal_code, city)
+                INSERT INTO addresses (id, user_id, address_type, street, building_number, apartment_number, postal_code, city, country)
                 SELECT gen_random_uuid(), id,
-                    %(adress_type)s
+                    %(adress_type)s,
                     %(street)s,      
                     %(building_number)s,                  
-                    %(apartment_number)s                  
+                    %(apartment_number)s,               
                     %(postal_code)s,               
                     %(city)s,
                     %(country)s             
@@ -43,11 +60,13 @@ class User():
                 RETURNING user_id;"""
         
         try:
-            if self.check_if_user_exist(pesel):
-                print ("User with this pesel already exists!")
-                return None
             with Connection() as conn:
+                if self._check_if_user_exist(pesel.value(), conn):
+                    print ("User with this pesel already exists!")
+                    return None
+                self.client_number=self._choose_client_number(conn)
                 cur = conn.execute(SQL, {
+                "client_number": self.client_number.value(),
                 "first_name": first_name.value(),
                 "last_name": last_name.value(),
                 "pesel": pesel.value(),
@@ -62,10 +81,12 @@ class User():
                 "city": city.value(),
                 "country": country,
                 })
-
-            if cur.rowcount != 1:
+            row = cur.fetchone()
+            if row is None:
                 print("User was not created!")
-            print("User created")
+                return
+            print(f"User created: client_number {self.client_number.value()}")
+            return self.client_number
 
         except psycopg.errors.UniqueViolation as e:
             print("User was not created: value already in use:", e.diag.constraint_name)
@@ -88,4 +109,4 @@ class User():
         except ConnectionError as e:
             print("User was not created: connection error:", e)
 
-    
+    #TODO getter numeru konta    

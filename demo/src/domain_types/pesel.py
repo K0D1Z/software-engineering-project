@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from striped_type import StripedType
+from .striped_type import StripedType
 
 _WEIGHTS = (1, 3, 7, 9, 1, 3, 7, 9, 1, 3)
 

@@ -1,28 +1,37 @@
+from cash_transactions.deposit import Deposit
 from transfer.transfer import Transfer
-from user.user import create_user
-from accounts.create_internal import create_inernal_bank_account
-from accounts.account import create_customer_account
+from user.user import User
+from accounts.internal_account import create_inernal_bank_account, INTERNAL_BANK_ACCOUNT_NUMBER
+from accounts.account import Account
+from currency.currency import Currency
+from domain_types import *
 from decimal import Decimal
 
 def main():
+    Currency(CurrencyCode("PLN")).add(Name("Polski złoty"), CurrencySymbol("zł"))
     create_inernal_bank_account()
-    create_user("01234567890", "Jan", "Kowalski", "abc@test.com")
-    create_user("11234567890", "Adam", "Nowak", "def@test.com")
-    create_customer_account(pesel="01234567890", number="00000000000000000000000001")
-    create_customer_account(pesel="11234567890", number="00000000000000000000000002")
-    Transfer(acount_number_source="00000000000000000000000099", 
-             acount_number_target="00000000000000000000000001",
-             amount=Decimal(1000.00)).execute()
-    Transfer(acount_number_source="00000000000000000000000001",
-                 acount_number_target="00000000000000000000000002",
-                 amount=Decimal(200.00)).execute()
-    Transfer(acount_number_source="00000000000000000000000001",
-                     acount_number_target="00000000000000000000000002",
-                     amount=Decimal(100.00)).execute()
-    Transfer(acount_number_source="00000000000000000000000001",
-                     acount_number_target="00000000000000000000000002",
-                     amount=Decimal(800.00)).execute()
 
+    client1_number = User().create(pesel=Pesel("02231512347"), first_name=Name("Andrzej"), last_name=Name("Nowak"),
+    email=Email("andrzejtest@gmail.com"), phone_number=Phone("123456789"), password=Password("123Qwe123#ABC"),
+    adress_type=AddressType.RESIDENTIAL, street=Street("Kawiory"), building_number=AddressNumber("21"),
+    apartment_number=AddressNumber("5"), postal_code=PostalCode("30-255"), city=City("Kraków"),
+    country=CountryCode.PL)
+    
+    client2_number = User().create(pesel=Pesel("99123100126"), first_name=Name("Filip"), last_name=Name("Kowalski"),
+    email=Email("filiptest@gmail.com"), phone_number=Phone("987654321"), password=Password("Qwe123Qwe#ABC"),
+    adress_type=AddressType.RESIDENTIAL, street=Street("Krowodrza"), building_number=AddressNumber("210"),
+    apartment_number=AddressNumber("6"), postal_code=PostalCode("30-155"), city=City("Kraków"),
+    country=CountryCode.PL)
+
+    account1_number = Account(client1_number).create(CurrencyCode("PLN"))
+    account2_number = Account(client2_number).create(CurrencyCode("PLN"))
+
+    Deposit(account_number=account1_number, ammount=MoneyAmount(Decimal(1000.00))).execute()
+    Transfer(account1_number, account2_number, MoneyAmount(Decimal(200.00))).execute()
+    Transfer(account1_number, account2_number, MoneyAmount(Decimal(100.00))).execute()
+    Transfer(account1_number, account2_number, MoneyAmount(Decimal(800.00))).execute() #Nie wykona się
+    Transfer(account2_number, account1_number, MoneyAmount(Decimal(100.00))).execute()
+    Transfer(account1_number, account2_number, MoneyAmount(Decimal(800.00))).execute()
 
 if __name__=="__main__":
     main()
