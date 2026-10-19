@@ -1,5 +1,5 @@
 from transfer.transfer import Transfer
-from user.create_example_user import create_user
+from user.user import create_user
 from accounts.create_internal import create_inernal_bank_account
 from accounts.account import create_customer_account
 from decimal import Decimal

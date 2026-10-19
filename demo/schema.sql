@@ -5,9 +5,11 @@ CREATE TABLE "currencies" (
   CONSTRAINT chk_currency_code CHECK ("code" ~ '^[A-Z]{3}$')
 );
 
+CREATE SEQUENCE customer_no_seq START 10000000 MINVALUE 10000000 MAXVALUE 99999999 NO CYCLE;
+
 CREATE TABLE "users" (
   "id" uuid PRIMARY KEY,
-  "client_number" varchar(10) UNIQUE NOT NULL,
+  "client_number" varchar(10) UNIQUE NOT NULL DEFAULT nextval('customer_no_seq'),
   "pesel" varchar(11) UNIQUE NOT NULL,
   "first_name" varchar(100) NOT NULL,
   "last_name" varchar(100) NOT NULL,
@@ -124,8 +126,6 @@ CREATE INDEX idx_ledger_transaction ON ledger (transaction_id);
 CREATE INDEX idx_accounts_user ON accounts (user_id);
 CREATE INDEX idx_addresses_user ON addresses (user_id);
 CREATE INDEX idx_rates_lookup ON exchange_rates (base_currency, target_currency, rate_timestamp DESC);
-
-
 
 CREATE OR REPLACE FUNCTION check_transaction_balanced() RETURNS trigger AS $$
 DECLARE
