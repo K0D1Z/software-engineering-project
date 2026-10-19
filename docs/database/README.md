@@ -2,4 +2,4 @@
 v1:
 [Check it out here](https://dbdocs.io/konrad-zatorski/database)
 v2
-[Check it out here](https://dbdocs.io/marcin-wilkus/database_IO)
+[Check it out here](https://dbdocs.io/marcin-wilkus/database-IO)

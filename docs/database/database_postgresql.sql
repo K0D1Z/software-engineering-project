@@ -1,12 +1,13 @@
 CREATE TABLE "currencies" (
   "code" varchar(3) PRIMARY KEY,
-  "name" varchar(50) NOT NULL,
+  "name" varchar(100) NOT NULL,
   "symbol" varchar(5) NOT NULL,
   CONSTRAINT chk_currency_code CHECK ("code" ~ '^[A-Z]{3}$')
 );
 
 CREATE TABLE "users" (
   "id" uuid PRIMARY KEY,
+  "client_number" varchar(8) UNIQUE NOT NULL,
   "pesel" varchar(11) UNIQUE NOT NULL,
   "first_name" varchar(100) NOT NULL,
   "last_name" varchar(100) NOT NULL,
@@ -26,19 +27,20 @@ CREATE TABLE "addresses" (
   "street" varchar(150),
   "building_number" varchar(15) NOT NULL,
   "apartment_number" varchar(15),
-  "postal_code" varchar(10) NOT NULL,
+  "postal_code" varchar(10),
   "city" varchar(100) NOT NULL,
   "country" varchar(2) NOT NULL DEFAULT 'PL',
-  "created_at" timestamp NOT NULL DEFAULT (now())
+  "created_at" timestamp NOT NULL DEFAULT (now()),
+  CONSTRAINT chk_postal_code_pl CHECK ("country" <> 'PL' OR "postal_code" ~ '^[0-9]{2}-[0-9]{3}$')
 );
 
 CREATE TABLE "accounts" (
   "id" uuid PRIMARY KEY,
   "user_id" uuid,
-  "balance" numeric(18,4) NOT NULL DEFAULT 0,  
+  "balance" numeric(18,2) NOT NULL DEFAULT 0,  
   "currency_code" varchar(3) NOT NULL,
-  "account_number" varchar(34) UNIQUE NOT NULL,
-  "account_type" varchar(20) NOT NULL,
+  "account_number" varchar(26) UNIQUE NOT NULL,
+  "account_type" varchar(20) NOT NULL DEFAULT 'CUSTOMER',
   "status" varchar(20) NOT NULL DEFAULT 'ACTIVE',
   "created_at" timestamp NOT NULL DEFAULT (now()),
   CONSTRAINT uq_accounts_id_currency UNIQUE ("id", "currency_code"),
@@ -65,7 +67,7 @@ CREATE TABLE "ledger" (
   "transaction_id" uuid NOT NULL,
   "account_id" uuid NOT NULL,
   "entry_type" varchar(6) NOT NULL,
-  "amount" numeric(18,4) NOT NULL,
+  "amount" numeric(18,2) NOT NULL,
   "currency_code" varchar(3) NOT NULL,
   "created_at" timestamp NOT NULL DEFAULT (now()),
   CONSTRAINT chk_entry_type CHECK ("entry_type" IN ('DEBIT','CREDIT')),
@@ -87,7 +89,7 @@ CREATE TABLE "scheduled_transactions" (
   "source_account_id" uuid NOT NULL,
   "target_account_id" uuid NOT NULL,
   "currency" varchar(3) NOT NULL,
-  "amount" numeric(18,4) NOT NULL,
+  "amount" numeric(18,2) NOT NULL,
   "status" varchar(20) NOT NULL DEFAULT 'ACTIVE',
   "created_at" timestamp NOT NULL DEFAULT (now()),
   CONSTRAINT chk_sched_amount CHECK ("amount" > 0),
@@ -122,8 +124,6 @@ CREATE INDEX idx_ledger_transaction ON ledger (transaction_id);
 CREATE INDEX idx_accounts_user ON accounts (user_id);
 CREATE INDEX idx_addresses_user ON addresses (user_id);
 CREATE INDEX idx_rates_lookup ON exchange_rates (base_currency, target_currency, rate_timestamp DESC);
-
-
 
 CREATE OR REPLACE FUNCTION check_transaction_balanced() RETURNS trigger AS $$
 DECLARE
