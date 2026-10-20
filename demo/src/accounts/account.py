@@ -12,6 +12,11 @@ MAX_NUMBER_ATTEMPTS = 10
 class Account():
     client_number: ClientNumber
     account_number: AccountNumber | None = field(default=None)
+    verbose: bool = False
+
+    def _log(self, *args):
+        if self.verbose:
+            print(*args)
 
     def _choose_account_number(self, conn) -> AccountNumber:
         """Draw random account numbers until one is not used in the database."""
@@ -32,6 +37,9 @@ class Account():
             WHERE u.client_number = %(client_number)s
             RETURNING account_number;"""
         try:
+            if not self.client_number:
+                self._log("Account: Client number is None")
+                return
             with Connection() as conn:
                 self.account_number = self._choose_account_number(conn)
                 cur = conn.execute(SQL, {
@@ -41,25 +49,25 @@ class Account():
                 })
                 row = cur.fetchone()
             if row is None:
-                print("Account was not created: client not found")
+                self._log("Account was not created: client not found")
                 return None
-            print("Account created:", self.account_number.value())
+            self._log("Account created:", self.account_number.value())
             return self.account_number
         except psycopg.errors.ForeignKeyViolation as e:
-            print("Account was not created: referenced record not found:", e.diag.constraint_name)
+            self._log("Account was not created: referenced record not found:", e.diag.constraint_name)
         except psycopg.errors.UniqueViolation as e:
-            print("Account was not created: value already in use:", e.diag.constraint_name)
+            self._log("Account was not created: value already in use:", e.diag.constraint_name)
         except psycopg.errors.CheckViolation as e:
-            print("Account was not created: value rejected by constraint:", e.diag.constraint_name)
+            self._log("Account was not created: value rejected by constraint:", e.diag.constraint_name)
         except psycopg.errors.NotNullViolation as e:
-            print("Account was not created: missing required value:", e.diag.column_name)
+            self._log("Account was not created: missing required value:", e.diag.column_name)
         except psycopg.errors.DataError as e:
-            print("Account was not created: invalid data format:", e.diag.message_primary)
+            self._log("Account was not created: invalid data format:", e.diag.message_primary)
         except psycopg.Error as e:
-            print("Account was not created: database error:", e)
+            self._log("Account was not created: database error:", e)
         except ConnectionError as e:
-            print("Account was not created: connection error:", e)
+            self._log("Account was not created: connection error:", e)
         except Exception as e:
-            print("Unkown error:", e)
+            self._log("Unkown error:", e)
 
     #close(self, ) TODO

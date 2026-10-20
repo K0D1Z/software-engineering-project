@@ -7,6 +7,7 @@ from accounts.internal_account import INTERNAL_BANK_ACCOUNT_NUMBER
 class Deposit():
     account_number: AccountNumber
     ammount: MoneyAmount
+    verbose: bool = False
 
-    def execute(self):
-        Transfer(INTERNAL_BANK_ACCOUNT_NUMBER, self.account_number, self.ammount).execute()
+    def execute(self) -> bool:
+        return Transfer(INTERNAL_BANK_ACCOUNT_NUMBER, self.account_number, self.ammount, verbose=self.verbose).execute()

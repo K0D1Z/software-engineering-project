@@ -12,5 +12,5 @@
 ## demo run
 
     uv sync
-    uv run src/demo_transfer.py
+    uv run src/demo_simple.py
     uv run src/demo_concurrency.py   # simultaneous transfers (threads)

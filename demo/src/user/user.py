@@ -11,6 +11,11 @@ MAX_NUMBER_ATTEMPTS = 10
 @dataclass(slots=True)
 class User():
     client_number: ClientNumber = field(init=False)
+    verbose: bool = False
+
+    def _log(self, *args):
+        if self.verbose:
+            print(*args)
 
     def _check_if_user_exist(self, pesel: str, conn) -> bool:
         SQL="""SELECT EXISTS (SELECT 1 FROM users
@@ -62,7 +67,7 @@ class User():
         try:
             with Connection() as conn:
                 if self._check_if_user_exist(pesel.value(), conn):
-                    print ("User with this pesel already exists!")
+                    self._log("User with this pesel already exists!")
                     return None
                 self.client_number=self._choose_client_number(conn)
                 cur = conn.execute(SQL, {
@@ -83,32 +88,32 @@ class User():
                 })
             row = cur.fetchone()
             if row is None:
-                print("User was not created!")
+                self._log("User was not created!")
                 return
-            print(f"User created: client_number {self.client_number.value()}")
+            self._log(f"User created: client_number {self.client_number.value()}")
             return self.client_number
 
         except psycopg.errors.UniqueViolation as e:
-            print("User was not created: value already in use:", e.diag.constraint_name)
+            self._log("User was not created: value already in use:", e.diag.constraint_name)
         except psycopg.errors.CheckViolation as e:
-            print("User was not created: value rejected by constraint:", e.diag.constraint_name)
+            self._log("User was not created: value rejected by constraint:", e.diag.constraint_name)
         except psycopg.errors.NotNullViolation as e:
-            print("User was not created: missing required value:", e.diag.column_name)
+            self._log("User was not created: missing required value:", e.diag.column_name)
         except psycopg.errors.ForeignKeyViolation as e:
-            print("User was not created: referenced record not found:", e.diag.constraint_name)
+            self._log("User was not created: referenced record not found:", e.diag.constraint_name)
         except psycopg.errors.DataError as e:
-            print("User was not created: invalid data format:", e.diag.message_primary)
+            self._log("User was not created: invalid data format:", e.diag.message_primary)
         except psycopg.errors.SyntaxError as e:
-            print("User was not created: SQL syntax error:", e.diag.message_primary)
+            self._log("User was not created: SQL syntax error:", e.diag.message_primary)
         except psycopg.Error as e:
-            print("User was not created: database error:", e)
+            self._log("User was not created: database error:", e)
         except ValueError as e:
-            print("User was not created: invalid input:", e)
+            self._log("User was not created: invalid input:", e)
         except AttributeError as e:
-            print("User was not created: missing or malformed field:", e)
+            self._log("User was not created: missing or malformed field:", e)
         except ConnectionError as e:
-            print("User was not created: connection error:", e)
+            self._log("User was not created: connection error:", e)
         except Exception as e:
-            print("Unkown error:", e)
+            self._log("Unkown error:", e)
 
     #TODO getter numeru konta    

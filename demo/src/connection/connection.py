@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 
 @dataclass(slots=True)
 class Connection():
-    verbose: bool = True
     url: str = field(init=False)
     inner: psycopg.Connection | None = field(init=False, default=None)
 
@@ -23,8 +22,6 @@ class Connection():
             inner.__exit__(*sys.exc_info())
             raise ConnectionError("Connection not established!")
         self.inner=inner
-        if self.verbose:
-            print("Connection established!")
         return conn
             
 
@@ -32,8 +29,6 @@ class Connection():
         try: 
             return self.inner.__exit__(exc_type, exc, tb)
         finally:
-            if self.verbose:
-                print("Connection closed!")
             self.inner=None
 
 

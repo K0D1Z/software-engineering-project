@@ -11,7 +11,7 @@ class Transfer():
     acount_number_target: AccountNumber
     amount: MoneyAmount
     hold_before_commit: float = 0 
-    verbose: bool = True
+    verbose: bool = False
 
     def _log(self, *args):
         if self.verbose:
@@ -34,7 +34,11 @@ class Transfer():
         """
 
         try:
-            with Connection(verbose=self.verbose) as conn:
+            if not self.acount_number_source or not self.acount_number_target:
+                self._log("Transfer: Account number is None")
+                return
+
+            with Connection() as conn:
                 cur = conn.execute(SQL, {"ref": f"TRF-{uuid4()}", "amount": self.amount.value(),
                                         "src": self.acount_number_source.value(),
                                         "dst": self.acount_number_target.value()})

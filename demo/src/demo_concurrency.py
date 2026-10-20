@@ -28,7 +28,7 @@ def reset_clock():
 
 
 def balance(account: AccountNumber) -> Decimal:
-    with Connection(verbose=False) as conn:
+    with Connection() as conn:
         return conn.execute("SELECT balance FROM accounts WHERE account_number = %s",
                             (account.value(),)).fetchone()[0]
 
@@ -67,14 +67,14 @@ def scenario_lock_wait(client: ClientNumber):
 
     def t1():
         log("T1", "start: transfer 800, will hold row lock for 3 s before COMMIT")
-        ok = Transfer(src, dst, MoneyAmount(Decimal("800.00")), hold_before_commit=3, verbose=False).execute()
+        ok = Transfer(src, dst, MoneyAmount(Decimal("800.00")), hold_before_commit=3).execute()
         log("T1", "COMMIT - success" if ok else "rejected")
         return ok
 
     def t2():
         time.sleep(0.5)
         log("T2", "start: transfer 800 (T1 is still uncommitted) -> waiting for row lock...")
-        ok = Transfer(src, dst, MoneyAmount(Decimal("800.00")), verbose=False).execute()
+        ok = Transfer(src, dst, MoneyAmount(Decimal("800.00"))).execute()
         log("T2", "success" if ok else "rejected: insufficient funds (CHECK balance >= 0)")
         return ok
 
@@ -97,7 +97,8 @@ def scenario_race(client: ClientNumber, threads: int = 10, amount: Decimal = Dec
     def worker(i: int) -> bool:
         barrier.wait()
         log(f"T{i}", "start")
-        ok = Transfer(src, dst, MoneyAmount(amount), hold_before_commit=0.3, verbose=False).execute()
+        ok = Transfer(src, dst, MoneyAmount(amount), hold_before_commit=0.3).execute()
+        
         log(f"T{i}", "success" if ok else "rejected: insufficient funds")
         return ok
 
@@ -123,7 +124,7 @@ def scenario_cross(client: ClientNumber, pairs: int = 10):
     def worker(i: int) -> bool:
         src, dst, name = (a, b, "A->B") if i % 2 == 0 else (b, a, "B->A")
         barrier.wait()
-        ok = Transfer(src, dst, MoneyAmount(Decimal("10.00")), hold_before_commit=0.1, verbose=False).execute()
+        ok = Transfer(src, dst, MoneyAmount(Decimal("10.00")), hold_before_commit=0.1).execute()
         log(f"T{i}", f"{name} " + ("success" if ok else "FAILED"))
         return ok
 
