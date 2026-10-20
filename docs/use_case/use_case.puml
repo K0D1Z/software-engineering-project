@@ -23,11 +23,11 @@ rectangle "Banking System" {
   usecase "Order transfer" as UC_Transfer
   usecase "Order one-time\ntransfer" as UC_OneTimeTransfer
   usecase "Order standing\ntransfer" as UC_StandingTransfer
-  usecase "Convert currency" as UC_ConversionTransfer
-  usecase "Check exchange rate" as UC_GetExchangeRate
   usecase "Cancel standing\ntransfer" as UC_CancelStandingTransfer
-
+  usecase "Convert currency" as UC_ConversionTransfer
   usecase "Execute scheduled\ntransfers" as UC_ScheduledTransfers
+  usecase "Check exchange rate" as UC_GetExchangeRate
+
   usecase "Reverse operation\nmanually" as UC_ReverseOperation
   usecase "Print transaction\nlist" as UC_PrintHistory
   usecase "Print account\nstatement" as UC_PrintStatement
@@ -47,9 +47,10 @@ Customer -- UC_GetExchangeRate
 
 UC_Transfer <|-- UC_OneTimeTransfer
 UC_Transfer <|-- UC_StandingTransfer
-UC_Transfer <|-- UC_ConversionTransfer
+UC_Transfer <.. UC_ConversionTransfer : <<extend>>
 
-UC_ConversionTransfer ..> UC_GetExchangeRate : <<include>>
+UC_GetExchangeRate <.. UC_ConversionTransfer : <<include>>
+
 
 UC_ScheduledTransfers -- Scheduler
 
@@ -62,5 +63,6 @@ UC_OneTimeTransfer -[hidden]- UC_ReverseOperation
 UC_OneTimeTransfer -[hidden]- UC_PrintHistory
 UC_OneTimeTransfer -[hidden]- UC_PrintStatement
 UC_OneTimeTransfer -[hidden]- UC_SetRates
+UC_OneTimeTransfer -[hidden]-UC_ScheduledTransfers
 
 @enduml
