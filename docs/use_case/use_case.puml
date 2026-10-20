@@ -1,0 +1,95 @@
+@startuml
+left to right direction
+skinparam linetype polyline
+skinparam nodesep 20
+skinparam ranksep 80
+skinparam usecase {
+  BackgroundColor #7FD1F5
+}
+
+actor Customer
+actor "Bank\nAdministrator" as Admin
+actor Scheduler
+actor "BIK" as BIK <<external system>>
+
+rectangle "Banking System" {
+  usecase "Open account" as UC_OpenAccount
+  usecase "Open deposit" as UC_OpenDeposit
+  usecase "Close account" as UC_CloseAccount
+  usecase "Close deposit" as UC_CloseDeposit
+  usecase "Check account balance" as UC_AccountBalance
+  usecase "Check transaction\nhistory" as UC_History
+  usecase "Deposit money" as UC_Deposit
+  usecase "Withdraw money" as UC_Withdraw
+
+  usecase "Order transfer" as UC_Transfer
+  usecase "Order one-time\ntransfer" as UC_OneTimeTransfer
+  usecase "Order standing\ntransfer" as UC_StandingTransfer
+  usecase "Execute scheduled\ntransfers" as UC_ScheduledTransfers
+  usecase "Pay for online\npurchases" as UC_OnlinePayment
+  usecase "Pay in local\ncurrency" as UC_LocalCurrencyPayment
+  usecase "Pay with\ncurrency conversion" as UC_ConversionPayment
+  usecase "Get exchange rate" as UC_GetExchangeRate
+  usecase "Set transaction\nlimits" as UC_Limits
+
+  usecase "Submit payment card\napplication" as UC_CardApplication
+  usecase "Block card" as UC_BlockCard
+  usecase "Submit loan application" as UC_LoanApplication
+  usecase "Assess credit\nworthiness" as UC_CreditWorthiness
+  usecase "Repay loan" as UC_RepayLoan
+  usecase "Grant power of attorney" as UC_GrantPoA
+  usecase "Revoke power of attorney" as UC_RevokePoA
+
+  usecase "Process application" as UC_ProcessApplication
+  usecase "Process card\napplication" as UC_ProcessCardApplication
+  usecase "Process loan\napplication" as UC_ProcessLoanApplication
+  usecase "Set exchange rates" as UC_SetRates
+  usecase "Browse customer\ntransaction history" as UC_CustomerHistory
+}
+
+Customer -- UC_OpenAccount
+Customer -- UC_OpenDeposit
+Customer -- UC_CloseAccount
+Customer -- UC_CloseDeposit
+Customer -- UC_AccountBalance
+Customer -- UC_History
+Customer -- UC_Deposit
+Customer -- UC_Withdraw
+Customer -- UC_Transfer
+Customer -- UC_OnlinePayment
+Customer -- UC_Limits
+Customer -- UC_CardApplication
+Customer -- UC_BlockCard
+Customer -- UC_LoanApplication
+Customer -- UC_RepayLoan
+Customer -- UC_GrantPoA
+Customer -- UC_RevokePoA
+
+UC_Transfer <|-- UC_OneTimeTransfer
+UC_Transfer <|-- UC_StandingTransfer
+UC_OnlinePayment <|-- UC_LocalCurrencyPayment
+UC_OnlinePayment <|-- UC_ConversionPayment
+
+UC_LoanApplication ..> UC_CreditWorthiness : <<include>>
+UC_ConversionPayment ..> UC_GetExchangeRate : <<include>>
+
+UC_ProcessCardApplication --|> UC_ProcessApplication
+UC_ProcessLoanApplication --|> UC_ProcessApplication
+
+UC_StandingTransfer <.. UC_ScheduledTransfers : fulfils orders
+
+UC_ScheduledTransfers -- Scheduler
+UC_CreditWorthiness -- BIK
+UC_ProcessApplication -- Admin
+UC_SetRates -- Admin
+UC_CustomerHistory -- Admin
+
+UC_Withdraw -[hidden]- UC_ProcessCardApplication
+UC_Withdraw -[hidden]- UC_ProcessLoanApplication
+UC_Withdraw -[hidden]- UC_SetRates
+UC_Withdraw -[hidden]- UC_CustomerHistory
+UC_ProcessCardApplication -[hidden]- UC_SetRates
+UC_ProcessCardApplication -[hidden]- UC_CustomerHistory
+UC_GetExchangeRate -[hidden]- BIK
+
+@enduml
