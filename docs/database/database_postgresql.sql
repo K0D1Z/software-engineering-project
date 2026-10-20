@@ -16,7 +16,7 @@ CREATE TABLE "users" (
   "password_hash" varchar(255) NOT NULL,
   "created_at" timestamp NOT NULL DEFAULT (now()),
   "status" varchar(20) NOT NULL DEFAULT 'ACTIVE',
-  CONSTRAINT chk_user_status CHECK ("status" IN ('ACTIVE','DELETED')),
+  CONSTRAINT chk_user_status CHECK ("status" IN ('ACTIVE','DELETED', 'PENDING', 'BLOCKED')),
   CONSTRAINT chk_pesel CHECK ("pesel" ~ '^[0-9]{11}$')
 );
 
@@ -24,29 +24,33 @@ CREATE TABLE "addresses" (
   "id" uuid PRIMARY KEY,
   "user_id" uuid NOT NULL,
   "address_type" varchar(20) NOT NULL DEFAULT 'RESIDENTIAL',
-  "street" varchar(150),
+  "street" varchar(150) NOT NULL,
   "building_number" varchar(15) NOT NULL,
   "apartment_number" varchar(15),
   "postal_code" varchar(10),
   "city" varchar(100) NOT NULL,
   "country" varchar(2) NOT NULL DEFAULT 'PL',
   "created_at" timestamp NOT NULL DEFAULT (now()),
-  CONSTRAINT chk_postal_code_pl CHECK ("country" <> 'PL' OR "postal_code" ~ '^[0-9]{2}-[0-9]{3}$')
+  CONSTRAINT chk_postal_code_pl CHECK ("country" <> 'PL' OR "postal_code" ~ '^[0-9]{2}-[0-9]{3}$'),
+  CONSTRAINT chk_address_type CHECK ("address_type" IN ('RESIDENTIAL', 'CORRESPONDENCE'))
 );
 
 CREATE TABLE "accounts" (
   "id" uuid PRIMARY KEY,
   "user_id" uuid,
-  "balance" numeric(18,2) NOT NULL DEFAULT 0,  
+  "balance" numeric(18,4) NOT NULL DEFAULT 0,  
   "currency_code" varchar(3) NOT NULL,
-  "account_number" varchar(26) UNIQUE NOT NULL,
+  "account_number" varchar(34) UNIQUE NOT NULL,
   "account_type" varchar(20) NOT NULL DEFAULT 'CUSTOMER',
   "status" varchar(20) NOT NULL DEFAULT 'ACTIVE',
   "created_at" timestamp NOT NULL DEFAULT (now()),
   CONSTRAINT uq_accounts_id_currency UNIQUE ("id", "currency_code"),
-  CONSTRAINT chk_account_type CHECK ("account_type" IN ('CUSTOMER' ,'INTERNAL')),
-  CONSTRAINT chk_account_status CHECK ("status" IN ('ACTIVE','CLOSED')),
-  CONSTRAINT chk_account_owner CHECK (("user_id" IS NULL) = ("account_type" = 'INTERNAL')),
+  CONSTRAINT chk_account_type CHECK ("account_type" IN ('CUSTOMER' ,'INTERNAL', 'SAVING', 'BUSINESS')),
+  CONSTRAINT chk_account_status CHECK ("status" IN ('ACTIVE','CLOSED', 'FROZEN', 'REJECTED')),
+  CONSTRAINT chk_account_owner CHECK (
+    ("account_type" = 'INTERNAL' AND "user_id" IS NULL) OR
+    ("account_type" <> 'INTERNAL' AND "user_id" IS NOT NULL)
+  ),
   CONSTRAINT chk_balance CHECK ("account_type" = 'INTERNAL' OR "balance" >= 0)
 );
 
@@ -59,7 +63,7 @@ CREATE TABLE "transactions" (
   "reverses_transaction_id" uuid,
   CONSTRAINT chk_no_self_reverse CHECK ("reverses_transaction_id" <> "id"),
   CONSTRAINT uq_tx_reversed_once UNIQUE ("reverses_transaction_id"),
-  CONSTRAINT chk_tx_status CHECK ("status" IN ('PENDING','POSTED','REVERSED'))
+  CONSTRAINT chk_tx_status CHECK ("status" IN ('PENDING','POSTED','REVERSED', 'REJECTED'))
 );
 
 CREATE TABLE "ledger" (
@@ -67,7 +71,7 @@ CREATE TABLE "ledger" (
   "transaction_id" uuid NOT NULL,
   "account_id" uuid NOT NULL,
   "entry_type" varchar(6) NOT NULL,
-  "amount" numeric(18,2) NOT NULL,
+  "amount" numeric(18,4) NOT NULL,
   "currency_code" varchar(3) NOT NULL,
   "created_at" timestamp NOT NULL DEFAULT (now()),
   CONSTRAINT chk_entry_type CHECK ("entry_type" IN ('DEBIT','CREDIT')),
@@ -89,8 +93,10 @@ CREATE TABLE "scheduled_transactions" (
   "source_account_id" uuid NOT NULL,
   "target_account_id" uuid NOT NULL,
   "currency" varchar(3) NOT NULL,
-  "amount" numeric(18,2) NOT NULL,
+  "amount" numeric(18,4) NOT NULL,
   "status" varchar(20) NOT NULL DEFAULT 'ACTIVE',
+  "cron_expression" varchar(50) NOT NULL,
+  "next_run_at" timestamp NOT NULL,
   "created_at" timestamp NOT NULL DEFAULT (now()),
   CONSTRAINT chk_sched_amount CHECK ("amount" > 0),
   CONSTRAINT chk_sched_accounts CHECK ("source_account_id" <> "target_account_id"),
