@@ -1,5 +1,6 @@
 from connection.connection import Connection
 import psycopg
+import time
 from dataclasses import dataclass
 from domain_types import AccountNumber, MoneyAmount
 from uuid import uuid4
@@ -9,8 +10,14 @@ class Transfer():
     acount_number_source: AccountNumber
     acount_number_target: AccountNumber
     amount: MoneyAmount
+    hold_before_commit: float = 0 
+    verbose: bool = True
 
-    def execute(self):
+    def _log(self, *args):
+        if self.verbose:
+            print(*args)
+
+    def execute(self) -> bool:
         #TODO check is active
         SQL: str = """
         WITH tx AS (
@@ -25,24 +32,32 @@ class Transfer():
         JOIN accounts a ON a.account_number = v.account_number
         ORDER BY a.id
         """
-        
+
         try:
-            with Connection() as conn:
-                cur = conn.execute(SQL, {"ref": f"TRF-{uuid4()}", "amount": self.amount.value(), 
-                                        "src": self.acount_number_source.value(), 
-                                        "dst": self.acount_number_target.value()})            
+            with Connection(verbose=self.verbose) as conn:
+                cur = conn.execute(SQL, {"ref": f"TRF-{uuid4()}", "amount": self.amount.value(),
+                                        "src": self.acount_number_source.value(),
+                                        "dst": self.acount_number_target.value()})
                 if cur.rowcount != 2:
                     raise ValueError("Source or target account not found")
-            print("Transfer finished successfully!")
+                if self.hold_before_commit:
+                    time.sleep(self.hold_before_commit)
+            self._log("Transfer finished successfully!")
+            return True
         except psycopg.errors.CheckViolation:
-            print("Insufficient funds")
+            self._log("Insufficient funds")
         except psycopg.errors.UniqueViolation:
-            print("Reference number already exists")
+            self._log("Reference number already exists")
+        except psycopg.errors.DeadlockDetected:
+            self._log("Deadlock detected")
         except psycopg.errors.RaiseException as e:
-            print("Rejected by the database:", e.diag.message_primary)
+            self._log("Rejected by the database:", e.diag.message_primary)
         except psycopg.Error as e:
-            print("Database error:", e)
+            self._log("Database error:", e)
         except ValueError as e:
-            print("Invalid transfer:", e)
+            self._log("Invalid transfer:", e)
         except ConnectionError as e:
-            print("Connection error:", e)
+            self._log("Connection error:", e)
+        except Exception as e:
+            self._log("Unkown error:", e)
+        return False

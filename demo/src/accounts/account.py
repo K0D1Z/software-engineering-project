@@ -59,5 +59,7 @@ class Account():
             print("Account was not created: database error:", e)
         except ConnectionError as e:
             print("Account was not created: connection error:", e)
+        except Exception as e:
+            print("Unkown error:", e)
 
     #close(self, ) TODO

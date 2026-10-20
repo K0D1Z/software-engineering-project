@@ -13,3 +13,4 @@
 
     uv sync
     uv run python src/demo_transfer.py
+    uv run python src/demo_concurrency.py   #równoczesne przelewy (wątki)

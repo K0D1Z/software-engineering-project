@@ -30,6 +30,8 @@ class Currency():
             print("Currency was not created: database error:", e)
         except ConnectionError as e:
             print("Currency was not created: connection error:", e)
+        except Exception as e:
+            print("Unkown error:", e)
 
 
     #def set_exchange_rate(self) TODO

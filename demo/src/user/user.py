@@ -108,5 +108,7 @@ class User():
             print("User was not created: missing or malformed field:", e)
         except ConnectionError as e:
             print("User was not created: connection error:", e)
+        except Exception as e:
+            print("Unkown error:", e)
 
     #TODO getter numeru konta    
