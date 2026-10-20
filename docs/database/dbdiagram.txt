@@ -52,6 +52,7 @@ Table transactions {
   status varchar(20) [not null, default: 'POSTED'] // Enum: POSTED, PENDING, REVERSED, REJECTED
   executed_at timestamp [not null, default: `now()`]
   reverses_transaction_id uuid [ref: - transactions.id] // Storno auto-reference in case of transaction reversal (immutable ledger)
+  scheduled_transaction_id uuid [ref: > scheduled_transactions.id]
 }
 
 // A double-entry ledger is an accounting record-keeping 
@@ -83,6 +84,7 @@ Table scheduled_transactions {
   currency varchar(3) [not null, ref: > currencies.code]
   // use numeric type avoid floating point rounding errors and numerical errors
   amount numeric(18, 4) [not null] // numeric(18, 4) is a standard in banking systems (ISO 4217 & ISO 20022 & Martin Fowler – Patterns of Enterprise Application Architecture)
+  description text [not null]
   cron_expression varchar(50) [not null] // recurring execution of the job; a proposal to use Unix cron syntax for scheduling tasks, e.g., '0 0 1 * *' (monthly)
   next_run_at timestamp [not null]
   status varchar(20) [not null, default: 'ACTIVE'] // Enum: ACTIVE, CANCELLED

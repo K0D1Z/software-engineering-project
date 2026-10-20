@@ -61,6 +61,7 @@ CREATE TABLE "transactions" (
   "status" varchar(20) NOT NULL DEFAULT 'POSTED',
   "executed_at" timestamp NOT NULL DEFAULT (now()),
   "reverses_transaction_id" uuid,
+  "scheduled_transaction_id" uuid,
   CONSTRAINT chk_no_self_reverse CHECK ("reverses_transaction_id" <> "id"),
   CONSTRAINT uq_tx_reversed_once UNIQUE ("reverses_transaction_id"),
   CONSTRAINT chk_tx_status CHECK ("status" IN ('PENDING','POSTED','REVERSED', 'REJECTED'))
@@ -94,6 +95,7 @@ CREATE TABLE "scheduled_transactions" (
   "target_account_id" uuid NOT NULL,
   "currency" varchar(3) NOT NULL,
   "amount" numeric(18,4) NOT NULL,
+  "description" text NOT NULL,
   "status" varchar(20) NOT NULL DEFAULT 'ACTIVE',
   "cron_expression" varchar(50) NOT NULL,
   "next_run_at" timestamp NOT NULL,
@@ -124,6 +126,8 @@ ALTER TABLE "scheduled_transactions" ADD FOREIGN KEY ("source_account_id") REFER
 ALTER TABLE "scheduled_transactions" ADD FOREIGN KEY ("target_account_id") REFERENCES "accounts" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "scheduled_transactions" ADD FOREIGN KEY ("currency") REFERENCES "currencies" ("code") DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE "transactions" ADD FOREIGN KEY ("scheduled_transaction_id") REFERENCES "scheduled_transactions" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 CREATE INDEX idx_ledger_account ON ledger (account_id, created_at);
 CREATE INDEX idx_ledger_transaction ON ledger (transaction_id);
