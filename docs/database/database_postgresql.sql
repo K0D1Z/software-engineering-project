@@ -45,8 +45,8 @@ CREATE TABLE "accounts" (
   "status" varchar(20) NOT NULL DEFAULT 'ACTIVE',
   "created_at" timestamp NOT NULL DEFAULT (now()),
   CONSTRAINT uq_accounts_id_currency UNIQUE ("id", "currency_code"),
-  CONSTRAINT chk_account_type CHECK ("account_type" IN ('CUSTOMER' ,'INTERNAL', 'SAVING', 'BUSINESS')),
-  CONSTRAINT chk_account_status CHECK ("status" IN ('ACTIVE','CLOSED', 'FROZEN', 'REJECTED')),
+  CONSTRAINT chk_account_type CHECK ("account_type" IN ('CUSTOMER' ,'INTERNAL')),
+  CONSTRAINT chk_account_status CHECK ("status" IN ('ACTIVE','CLOSED', 'FROZEN')),
   CONSTRAINT chk_account_owner CHECK (
     ("account_type" = 'INTERNAL' AND "user_id" IS NULL) OR
     ("account_type" <> 'INTERNAL' AND "user_id" IS NOT NULL)
