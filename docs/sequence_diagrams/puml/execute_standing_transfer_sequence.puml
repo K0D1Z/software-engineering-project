@@ -1,0 +1,41 @@
+@startuml
+title Execute standing transfer
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 260
+
+participant "Scheduled Job Worker\n(Celery Beat)" as worker
+participant "Core Banking API\n(FastAPI)" as api
+database "PostgreSQL" as db
+
+worker -> api : POST /internal/standing-orders/execute-due\nHeaders: {Authorization: Bearer <service_token>}
+api -> api : Authenticates service token
+api -> db : SELECT * FROM scheduled_transactions\nWHERE status = 'ACTIVE' AND next_run_at <= now()\nLIMIT 50 FOR UPDATE SKIP LOCKED
+db --> api : due standing orders
+
+loop for each standing order
+    api -> db : BEGIN;\nSELECT id, balance, status FROM accounts\nWHERE id IN (:source_id, :target_id) ORDER BY id FOR UPDATE
+    db --> api : source & target accounts locked
+    
+    alt source account FROZEN or balance < amount (insufficient funds)
+        api -> db : ROLLBACK
+        note over api, db
+            Transaction is skipped for this execution cycle.
+            Optionally increments retry count or records audit warning.
+        end note
+    else sufficient funds & accounts ACTIVE
+        api -> db : INSERT INTO transactions\n(id, reference_number, description, status = 'POSTED', scheduled_transaction_id = :order_id)
+        api -> db : INSERT INTO ledger: DEBIT on source, CREDIT on target
+        note over db
+            Triggers update balances and verify ledger integrity (DEFERRABLE DEFERRED)
+        end note
+        api -> api : Computes new_next_run = next occurrence based on cron_expression
+        api -> db : UPDATE scheduled_transactions\nSET next_run_at = :new_next_run WHERE id = :order_id
+        api -> db : COMMIT
+        db --> api : committed
+    end
+end
+
+api --> worker : 200 OK {executedCount: N, skippedCount: M}
+@enduml

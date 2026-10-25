@@ -1,1 +1,1 @@
-I used https://plantuml.com/ for this diagram.
+## Use Case Diagram built with [plantuml.com](https://plantuml.com/)

@@ -1,0 +1,116 @@
+@startuml
+title Single Transfer Execution State (Complete Attributes)
+skinparam objectAttributeIconSize 0
+
+object "sender : User" as u1 {
+  id = "e58612a6-913b-4817-910d-85d38865c001"
+  client_number = "10023456"
+  pesel = "99010112345"
+  first_name = "Jan"
+  last_name = "Kowalski"
+  email = "jan.kowalski@example.com"
+  phone_number = "+48123456789"
+  password_hash = "##########..."
+  role = CUSTOMER
+  status = ACTIVE
+  created_at = 2026-09-01 10:00:00
+}
+
+object "senderAddress : Address" as addr1 {
+  id = "d1111111-1111-1111-1111-111111111111"
+  address_type = RESIDENTIAL
+  street = "Czarnowiejska"
+  building_number = "10"
+  apartment_number = "4B"
+  postal_code = "30-054"
+  city = "Kraków"
+  country = "PL"
+  created_at = 2026-09-01 10:05:00
+}
+
+object "recipient : User" as u2 {
+  id = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+  client_number = "10098765"
+  pesel = "98020254321"
+  first_name = "Anna"
+  last_name = "Nowak"
+  email = "anna.nowak@example.com"
+  phone_number = "+48987654321"
+  password_hash = "##########..."
+  role = CUSTOMER
+  status = ACTIVE
+  created_at = 2026-09-05 14:30:00
+}
+
+object "currPLN : Currency" as c1 {
+  code = "PLN"
+  name = "Polish Zloty"
+  symbol = "zł"
+}
+
+object "accSource : Account" as a1 {
+  id = "a1111111-2222-3333-4444-555555555555"
+  user_id = "e58612a6-913b-4817-910d-85d38865c001"
+  account_number = "PL12345678901234567890123456"
+  currency_code = "PLN"
+  balance = 12350.0000
+  account_type = CUSTOMER
+  status = ACTIVE
+  created_at = 2026-09-01 10:10:00
+}
+
+object "accTarget : Account" as a2 {
+  id = "a2222222-3333-4444-5555-666666666666"
+  user_id = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+  account_number = "PL98765432109876543210987654"
+  currency_code = "PLN"
+  balance = 2600.0000
+  account_type = CUSTOMER
+  status = ACTIVE
+  created_at = 2026-09-05 14:35:00
+}
+
+object "tx : Transaction" as t {
+  id = "t3333333-4444-5555-6666-777777777777"
+  reference_number = "TRX-20261025-001"
+  description = "Example description"
+  status = POSTED
+  executed_at = 2026-10-25 12:00:00
+  reverses_transaction_id = null
+  scheduled_transaction_id = null
+  initiated_by = "e58612a6-913b-4817-910d-85d38865c001"
+}
+
+object "entryDebit : LedgerEntry" as l1 {
+  id = "l1111111-0000-0000-0000-000000000001"
+  transaction_id = "t3333333-4444-5555-6666-777777777777"
+  account_id = "a1111111-2222-3333-4444-555555555555"
+  entry_type = DEBIT
+  amount = 100.0000
+  currency_code = "PLN"
+  created_at = 2026-10-25 12:00:00
+}
+
+object "entryCredit : LedgerEntry" as l2 {
+  id = "l2222222-0000-0000-0000-000000000002"
+  transaction_id = "t3333333-4444-5555-6666-777777777777"
+  account_id = "a2222222-3333-4444-5555-666666666666"
+  entry_type = CREDIT
+  amount = 100.0000
+  currency_code = "PLN"
+  created_at = 2026-10-25 12:00:00
+}
+
+u1 *-- addr1 : addresses
+u1 -- a1 : owner
+u2 -- a2 : owner
+
+a1 -- c1
+a2 -- c1
+
+t *-- l1 : entries
+t *-- l2 : entries
+
+l1 --> a1
+l2 --> a2
+@enduml

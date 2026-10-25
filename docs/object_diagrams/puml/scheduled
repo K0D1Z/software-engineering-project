@@ -1,0 +1,23 @@
+@startuml
+title  Scheduled Transaction State (Simplified)
+skinparam objectAttributeIconSize 0
+
+object "standingOrder : ScheduledTransaction" as so {
+  id = "so-999-..."
+  cron_expression = "0 0 1 * *"
+  amount = 1500.0000
+  currency = "PLN"
+  description = "Scheduled Transfer"
+  status = ACTIVE
+  next_run_at = 2026-12-01 00:00:00
+}
+
+object "txTransaction : Transaction" as t1 {
+  id = "tx-01-..."
+  reference_number = "AUTO-20261001-01"
+  executed_at = 2026-10-01 00:00:05
+  scheduled_transaction_id = "so-999-..."
+}
+
+so "1" <-- t1 : generated_from
+@enduml

@@ -1,0 +1,48 @@
+@startuml
+title Reverse operation manually (administrator)
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 260
+
+actor "Bank Administrator" as admin
+participant "Admin Web App\n(React SPA)" as spa
+participant "Core Banking API\n(FastAPI)" as api
+database "PostgreSQL" as db
+
+admin -> spa : Enters Reference Number (TRN) and clicks "Search"
+spa -> api : GET /admin/transactions/by-reference/{referenceNumber}
+api -> api : Authenticates user & verifies ADMIN role
+api -> db : SELECT * FROM transactions WHERE reference_number = :ref
+db --> api : original transaction details
+spa --> admin : Displays transaction details and "Reverse Transaction" button
+
+admin -> spa : Clicks "Reverse Transaction" (provides reason)
+spa -> api : POST /admin/transactions/{originalId}/reverse {reason}
+api -> api : Verifies ADMIN role and validates reason
+api -> db : BEGIN;\nSELECT * FROM transactions WHERE id = :originalId FOR UPDATE
+db --> api : transaction row locked
+
+alt transaction already reversed (uq_tx_reversed_once) OR status != 'POSTED'
+    api -> db : ROLLBACK
+    api --> spa : 409 Conflict (Transaction already reversed or invalid status)
+    spa --> admin : Shows error: Cannot reverse transaction
+else transaction eligible for reversal
+    api -> db : SELECT * FROM ledger WHERE transaction_id = :originalId
+    db --> api : original ledger entries (DEBIT, CREDIT)
+    api -> db : SELECT id, balance FROM accounts WHERE id IN (original account_ids) ORDER BY id FOR UPDATE
+    db --> api : accounts locked
+    
+    api -> db : INSERT INTO transactions\n(id, reference_number, description, status = 'POSTED', reverses_transaction_id = :originalId)
+    api -> db : INSERT INTO ledger: inverted entries\n(CREDIT on original source, DEBIT on original target)
+    note over db
+        Triggers update balances back and assert zero-sum balance
+    end note
+    api -> db : UPDATE transactions SET status = 'REVERSED' WHERE id = :originalId
+    api -> db : COMMIT
+    db --> api : committed
+    
+    api --> spa : 200 OK {reversalTransactionId, newReferenceNumber, status: 'POSTED'}
+    spa --> admin : Shows success confirmation
+end
+@enduml

@@ -1,0 +1,51 @@
+@startuml
+title Transaction Reversal State (Simplified)
+skinparam objectAttributeIconSize 0
+
+object "txOriginal : Transaction" as tx1 {
+  id = "t1111111-..."
+  reference_number = "TRX-20261020-099"
+  description = "VAT 123/2026"
+  status = REVERSED
+}
+
+object "origDebit : LedgerEntry" as l1 {
+  account_id = "accA"
+  entry_type = DEBIT
+  amount = 500.0000
+}
+
+object "origCredit : LedgerEntry" as l2 {
+  account_id = "accB"
+  entry_type = CREDIT
+  amount = 500.0000
+}
+
+object "txReversal : Transaction" as tx2 {
+  id = "t2222222-..."
+  reference_number = "REV-20261025-001"
+  description = "Transaction reversal"
+  status = POSTED
+  reverses_transaction_id = "t1111111-..."
+}
+
+object "revCredit : LedgerEntry" as l3 {
+  account_id = "accA"
+  entry_type = CREDIT
+  amount = 500.0000
+}
+
+object "revDebit : LedgerEntry" as l4 {
+  account_id = "accB"
+  entry_type = DEBIT
+  amount = 500.0000
+}
+
+tx1 *-- l1
+tx1 *-- l2
+
+tx2 *-- l3
+tx2 *-- l4
+
+tx2 ..> tx1 : reverses
+@enduml
