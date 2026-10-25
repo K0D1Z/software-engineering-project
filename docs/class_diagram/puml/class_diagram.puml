@@ -1,0 +1,412 @@
+@startuml minibank_classes
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 40
+skinparam ranksep 60
+hide circle
+hide empty members
+top to bottom direction
+
+package "Scheduled Job Worker" {
+  class StandingOrderTask {
+    -api_url : str
+    -service_token : str
+    +run() : None
+  }
+}
+
+package "Services" {
+  class AuthService {
+    -uow : UnitOfWork
+    -password_hasher : PasswordHasher
+    -token_secret : str
+    +register(first_name : Name, last_name : Name, email : Email,\n  pesel : Pesel, phone_number : Phone, password : Password) : User
+    +login(email : Email, raw_password : str) : str
+    +authenticate(token : str) : User
+  }
+
+  class UserService {
+    -uow : UnitOfWork
+    +update_contact_data(actor : User, email : Email, phone_number : Phone) : None
+    +set_address(actor : User, address : Address) : None
+    +list_users(actor : User, offset : int, limit : int) : list[User]
+    +activate_user(actor : User, user_id : UUID) : None
+    +block_user(actor : User, user_id : UUID) : None
+    +unblock_user(actor : User, user_id : UUID) : None
+    +deactivate_user(actor : User, user_id : UUID) : None
+  }
+
+  class AccountService {
+    -uow : UnitOfWork
+    +open_account(actor : User, currency_code : CurrencyCode) : Account
+    +get_accounts(actor : User, user_id : Optional[UUID]) : list[Account]
+    +get_account(actor : User, account_number : AccountNumber) : Account
+    +close_account(actor : User, account_number : AccountNumber) : None
+    +freeze_account(actor : User, account_number : AccountNumber) : None
+    +unfreeze_account(actor : User, account_number : AccountNumber) : None
+  }
+
+  class ExchangeRateService {
+    -uow : UnitOfWork
+    +get_current_rates() : list[ExchangeRate]
+    +convert(amount : MoneyAmount, source : CurrencyCode,\n  target : CurrencyCode) : ConversionResult
+    +set_rate(actor : User, base : CurrencyCode,\n  target : CurrencyCode, rate : Decimal) : ExchangeRate
+  }
+
+  class TransactionService {
+    -uow : UnitOfWork
+    -exchange_rates : ExchangeRateService
+    +transfer(actor : User, source_account : AccountNumber, target_account : AccountNumber,\n  amount : MoneyAmount, description : str) : Transaction
+    +deposit(actor : User, account_number : AccountNumber,\n  amount : MoneyAmount, description : str) : Transaction
+    +withdraw(actor : User, account_number : AccountNumber,\n  amount : MoneyAmount, description : str) : Transaction
+    +create_standing_order(actor : User, source_account : AccountNumber, target_account : AccountNumber,\n  amount : MoneyAmount, description : str, cron_expression : str) : ScheduledTransaction
+    +get_standing_orders(actor : User, account_number : AccountNumber) : list[ScheduledTransaction]
+    +cancel_standing_order(actor : User, standing_order_id : UUID) : None
+    +execute_due_standing_orders(now : datetime, limit : int) : int
+    +request_reversal(actor : User, transaction_id : UUID, reason : str) : Transaction
+    +list_reversal_requests(actor : User) : list[Transaction]
+    +approve_reversal_request(actor : User, request_id : UUID) : Transaction
+    +reject_reversal_request(actor : User, request_id : UUID) : Transaction
+    +reverse_transaction(actor : User, transaction_id : UUID, reason : str) : Transaction
+  }
+
+  class ReportService {
+    -uow : UnitOfWork
+    -pdf_renderer : PdfRenderer
+    +get_history(actor : User, account_number : AccountNumber,\n  period_from : datetime, period_to : datetime) : list[LedgerEntry]
+    +print_statement(actor : User, account_number : AccountNumber,\n  period_from : datetime, period_to : datetime) : bytes
+    +print_transaction_list(actor : User, period_from : datetime, period_to : datetime,\n  account_number : Optional[AccountNumber]) : bytes
+  }
+
+  class PasswordHasher {
+    +hash(password : Password) : str
+    +verify(raw_password : str, password_hash : str) : bool
+  }
+
+  class PdfRenderer {
+    +render_statement(statement : Statement) : bytes
+    +render_transaction_list(transactions : list[Transaction]) : bytes
+  }
+}
+
+package "Data access" {
+  class UnitOfWork {
+    -session : DbSession
+    +users : UserRepository
+    +accounts : AccountRepository
+    +transactions : TransactionRepository
+    +ledger : LedgerRepository
+    +currencies : CurrencyRepository
+    +exchange_rates : ExchangeRateRepository
+    +scheduled_transactions : ScheduledTransactionRepository
+    +commit() : None
+    +rollback() : None
+  }
+
+  class UserRepository {
+    -session : DbSession
+    +get(user_id : UUID) : Optional[User]
+    +get_by_email(email : Email) : Optional[User]
+    +list(offset : int, limit : int) : list[User]
+    +exists_by_email(email : Email) : bool
+    +exists_by_pesel(pesel : Pesel) : bool
+    +save(user : User) : None
+  }
+
+  class AccountRepository {
+    -session : DbSession
+    +get_by_number(account_number : AccountNumber) : Optional[Account]
+    +get_internal(currency_code : CurrencyCode) : Optional[Account]
+    +list_by_user(user_id : UUID) : list[Account]
+    +lock(account_ids : list[UUID]) : list[Account]
+    +save(account : Account) : None
+  }
+
+  class TransactionRepository {
+    -session : DbSession
+    +get(transaction_id : UUID) : Optional[Transaction]
+    +list_pending_reversal_requests() : list[Transaction]
+    +list_by_period(period_from : datetime, period_to : datetime,\n  account_id : Optional[UUID]) : list[Transaction]
+    +save(transaction : Transaction) : None
+  }
+
+  class LedgerRepository {
+    -session : DbSession
+    +list_by_account(account_id : UUID, period_from : datetime,\n  period_to : datetime) : list[LedgerEntry]
+    +balance_at(account_id : UUID, moment : datetime) : Decimal
+  }
+
+  class CurrencyRepository {
+    -session : DbSession
+    +get(code : CurrencyCode) : Optional[Currency]
+    +list_all() : list[Currency]
+  }
+
+  class ExchangeRateRepository {
+    -session : DbSession
+    +get_latest(base : CurrencyCode, target : CurrencyCode) : Optional[ExchangeRate]
+    +list_latest() : list[ExchangeRate]
+    +add(rate : ExchangeRate) : None
+  }
+
+  class ScheduledTransactionRepository {
+    -session : DbSession
+    +get(standing_order_id : UUID) : Optional[ScheduledTransaction]
+    +list_by_account(account_id : UUID) : list[ScheduledTransaction]
+    +list_due(now : datetime, limit : int) : list[ScheduledTransaction]
+    +save(order : ScheduledTransaction) : None
+  }
+}
+
+package "Domain" {
+  class User {
+    -id : UUID
+    -client_number : ClientNumber
+    -pesel : Pesel
+    -first_name : Name
+    -last_name : Name
+    -email : Email
+    -phone_number : Phone
+    -password_hash : str
+    -role : Role
+    -status : UserStatus
+    -created_at : datetime
+    -addresses : list[Address]
+    +{static} create(client_number : ClientNumber, pesel : Pesel, first_name : Name, last_name : Name,\n  email : Email, phone_number : Phone, password_hash : str, role : Role) : User
+    +is_active() : bool
+    +has_role(role : Role) : bool
+    +activate() : None
+    +block() : None
+    +unblock() : None
+    +deactivate() : None
+    +update_contact(email : Email, phone_number : Phone) : None
+    +set_address(address : Address) : None
+    +masked_pesel() : str
+  }
+
+  class Address {
+    -id : UUID
+    -address_type : AddressType
+    -street : Street
+    -building_number : AddressNumber
+    -apartment_number : Optional[AddressNumber]
+    -postal_code : Optional[PostalCode]
+    -city : City
+    -country : CountryCode
+    -created_at : datetime
+    +formatted() : str
+  }
+
+  class Account {
+    -id : UUID
+    -user_id : Optional[UUID]
+    -account_number : AccountNumber
+    -currency_code : CurrencyCode
+    -balance : Decimal {readOnly}
+    -account_type : AccountType
+    -status : AccountStatus
+    -created_at : datetime
+    +{static} create_customer_account(user_id : UUID, account_number : AccountNumber,\n  currency_code : CurrencyCode) : Account
+    +is_active() : bool
+    +is_owned_by(user_id : UUID) : bool
+    +has_sufficient_funds(amount : MoneyAmount) : bool
+    +can_be_closed() : bool
+    +freeze() : None
+    +unfreeze() : None
+    +close() : None
+  }
+
+  class Transaction {
+    -id : UUID
+    -reference_number : str
+    -description : str
+    -status : TransactionStatus
+    -executed_at : datetime
+    -reverses_transaction_id : Optional[UUID]
+    -scheduled_transaction_id : Optional[UUID]
+    -initiated_by : Optional[UUID]
+    -entries : list[LedgerEntry]
+    +{static} create(reference_number : str, description : str, initiated_by : Optional[UUID],\n  scheduled_transaction_id : Optional[UUID]) : Transaction
+    +{static} create_reversal_request(reference_number : str, original : Transaction,\n  reason : str, requested_by : UUID) : Transaction
+    +debit(account : Account, amount : MoneyAmount) : None
+    +credit(account : Account, amount : MoneyAmount) : None
+    +apply_reversal_of(original : Transaction) : None
+    +post() : None
+    +reject() : None
+    +mark_reversed() : None
+    +is_reversible() : bool
+  }
+
+  class LedgerEntry {
+    -id : UUID
+    -transaction_id : UUID
+    -account_id : UUID
+    -entry_type : EntryType
+    -amount : MoneyAmount
+    -currency_code : CurrencyCode
+    -created_at : datetime
+    +signed_amount() : Decimal
+    +inverted(transaction_id : UUID) : LedgerEntry
+  }
+
+  class Currency {
+    -code : CurrencyCode
+    -name : str
+    -symbol : CurrencySymbol
+  }
+
+  class ExchangeRate {
+    -id : int
+    -base_currency : CurrencyCode
+    -target_currency : CurrencyCode
+    -rate : Decimal
+    -rate_timestamp : datetime
+    +convert(amount : MoneyAmount) : Decimal
+    +inverse() : ExchangeRate
+  }
+
+  class ScheduledTransaction {
+    -id : UUID
+    -source_account_id : UUID
+    -target_account_id : UUID
+    -amount : MoneyAmount
+    -currency : CurrencyCode
+    -description : str
+    -cron_expression : str
+    -next_run_at : datetime
+    -status : ScheduledStatus
+    -created_at : datetime
+    +{static} create(source_account_id : UUID, target_account_id : UUID, amount : MoneyAmount,\n  currency : CurrencyCode, description : str, cron_expression : str) : ScheduledTransaction
+    +is_due(now : datetime) : bool
+    +advance(now : datetime) : None
+    +cancel() : None
+  }
+}
+
+package "Result Objects" {
+  class ConversionResult {
+    -source_amount : MoneyAmount
+    -source_currency : CurrencyCode
+    -target_amount : Decimal
+    -target_currency : CurrencyCode
+    -rate : Decimal
+  }
+
+  class Statement {
+    -account_number : AccountNumber
+    -currency_code : CurrencyCode
+    -period_from : datetime
+    -period_to : datetime
+    -opening_balance : Decimal
+    -closing_balance : Decimal
+    -entries : list[LedgerEntry]
+  }
+}
+
+package "Enums" {
+  class UserStatus <<enumeration>> {
+    ACTIVE
+    PENDING
+    BLOCKED
+    DELETED
+  }
+  class Role <<enumeration>> {
+    CUSTOMER
+    ADMIN
+  }
+  class AddressType <<enumeration>> {
+    RESIDENTIAL
+    CORRESPONDENCE
+  }
+  class AccountType <<enumeration>> {
+    CUSTOMER
+    INTERNAL
+  }
+  class AccountStatus <<enumeration>> {
+    ACTIVE
+    FROZEN
+    CLOSED
+  }
+  class TransactionStatus <<enumeration>> {
+    PENDING
+    POSTED
+    REVERSED
+    REJECTED
+  }
+  class EntryType <<enumeration>> {
+    DEBIT
+    CREDIT
+  }
+  class ScheduledStatus <<enumeration>> {
+    ACTIVE
+    CANCELLED
+  }
+}
+
+StandingOrderTask ..> TransactionService : HTTPS
+
+AuthService -[hidden]down- ExchangeRateService
+UserService -[hidden]down- TransactionService
+AccountService -[hidden]down- ReportService
+ExchangeRateService -[hidden]down- PasswordHasher
+ReportService -[hidden]down- PdfRenderer
+
+AuthService --> UnitOfWork
+AuthService --> PasswordHasher
+UserService --> UnitOfWork
+AccountService --> UnitOfWork
+ExchangeRateService --> UnitOfWork
+TransactionService --> UnitOfWork
+TransactionService --> ExchangeRateService
+ReportService --> UnitOfWork
+ReportService --> PdfRenderer
+
+UnitOfWork *-- UserRepository
+UnitOfWork *-- AccountRepository
+UnitOfWork *-- TransactionRepository
+UnitOfWork *-- LedgerRepository
+UnitOfWork *-- CurrencyRepository
+UnitOfWork *-- ExchangeRateRepository
+UnitOfWork *-- ScheduledTransactionRepository
+
+UserRepository -[hidden]down- CurrencyRepository
+AccountRepository -[hidden]down- ExchangeRateRepository
+TransactionRepository -[hidden]down- ScheduledTransactionRepository
+
+UserRepository ..> User
+AccountRepository ..> Account
+TransactionRepository ..> Transaction
+LedgerRepository ..> LedgerEntry
+CurrencyRepository ..> Currency
+ExchangeRateRepository ..> ExchangeRate
+ScheduledTransactionRepository ..> ScheduledTransaction
+
+User "1" *-- "0..2" Address : addresses
+User "0..1" -- "0..*" Account : owner
+Account "0..*" -- "1" Currency
+Account "1" -- "0..*" LedgerEntry
+Transaction "1" *-- "0..*" LedgerEntry : entries
+Transaction "0..1" -- "0..1" Transaction : reverses
+Transaction "0..*" -- "0..1" User : initiated_by
+ScheduledTransaction "0..1" -- "0..*" Transaction : generates
+ScheduledTransaction "0..*" -- "1" Account : source
+ScheduledTransaction "0..*" -- "1" Account : target
+ScheduledTransaction "0..*" -- "1" Currency
+ExchangeRate "0..*" -- "1" Currency : base
+ExchangeRate "0..*" -- "1" Currency : target
+
+Statement --> "0..*" LedgerEntry : entries
+
+LedgerEntry -[hidden]down- ConversionResult
+ConversionResult -[hidden]right- Statement
+ConversionResult -[hidden]down- UserStatus
+
+UserStatus -[hidden]right- Role
+Role -[hidden]right- AddressType
+AddressType -[hidden]right- AccountType
+UserStatus -[hidden]down- AccountStatus
+AccountStatus -[hidden]right- TransactionStatus
+TransactionStatus -[hidden]right- EntryType
+EntryType -[hidden]right- ScheduledStatus
+
+@enduml

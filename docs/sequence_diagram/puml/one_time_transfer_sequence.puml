@@ -1,0 +1,53 @@
+@startuml
+title Order one-time transfer (with optional currency conversion)
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 260
+actor "Customer" as customer
+participant "Customer Web App\n(React SPA)" as spa
+participant "Core Banking API\n(FastAPI)" as api
+database "PostgreSQL" as db
+
+customer -> spa : Fills in the New Transfer form: source account, recipient IBAN, amount, currency, description
+opt currency differs from the source account currency (conversion preview)
+spa -> api : GET /exchange-rates/latest?base=EUR&target=PLN
+api -> db : SELECT rate FROM exchange_rates WHERE base/target match ORDER BY rate_timestamp DESC LIMIT 1
+db --> api : rate, rate_timestamp
+api --> spa : current rate
+spa --> customer : Shows Currency Conversion box: current rate and estimated total charge
+end
+customer -> spa : Clicks Make a Transfer
+spa -> api : POST /transfers {sourceAccountId, recipientAccountNumber, amount, currency, description}
+api -> api : Authenticates the user (token) and validates the payload (amount > 0, IBAN format)
+api -> db : BEGIN; SELECT ... FROM accounts WHERE id = :source OR account_number = :recipient ORDER BY id FOR UPDATE
+db --> api : both account rows locked
+alt source not owned by user / account not ACTIVE / recipient not found
+api -> db : ROLLBACK
+api --> spa : 403 / 404 / 422 error
+spa --> customer : Shows error message
+else accounts are valid
+opt currencies differ (Convert currency)
+api -> api : Converts: converted amount = amount x latest rate (Decimal, 4 decimal places)
+note over api
+Ledger must balance per currency, so a conversion is booked as 4 entries via the INTERNAL account (design proposal)
+end note
+end
+api -> db : INSERT INTO transactions (reference_number, description, status = POSTED)
+api -> db : INSERT INTO ledger: DEBIT on source account, CREDIT on recipient account
+note over db
+Triggers: ledger_apply_to_balance updates balances, chk_balance rejects balance < 0, trg_ledger_balanced checks DEBIT = CREDIT at COMMIT
+end note
+alt insufficient funds (chk_balance violated)
+db --> api : error: check_violation
+api -> db : ROLLBACK
+api --> spa : 422 Insufficient funds
+spa --> customer : Shows 'insufficient funds'
+else success
+api -> db : COMMIT
+db --> api : committed
+api --> spa : 201 Created {transactionId, referenceNumber, newBalance}
+spa --> customer : Shows confirmation and the updated balance
+end
+end
+@enduml
