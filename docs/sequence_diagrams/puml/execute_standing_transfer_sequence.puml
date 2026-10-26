@@ -20,11 +20,6 @@ loop until no due orders left or batch limit (50) reached
     api -> db : BEGIN;\nSELECT * FROM scheduled_transactions\nWHERE status = 'ACTIVE' AND next_run_at <= :now_utc\nORDER BY next_run_at LIMIT 1\nFOR UPDATE SKIP LOCKED
     db --> api : one due order (row locked until COMMIT)
 
-    note over api, db
-        The order row stays locked until COMMIT, so parallel workers skip it.
-        next_run_at is advanced in the same transaction - no double execution.
-    end note
-
     api -> db : SELECT id, balance, status, currency_code, account_type FROM accounts\nWHERE id IN (:source, :target, [INTERNAL source ccy, INTERNAL target ccy])\nORDER BY id FOR UPDATE
     db --> api : involved accounts locked
 
@@ -48,11 +43,6 @@ loop until no due orders left or batch limit (50) reached
         else currencies differ
             api -> db : INSERT INTO ledger (4 entries):\nDEBIT source / CREDIT INTERNAL (amount, source ccy)\nDEBIT INTERNAL / CREDIT target (converted amount, target ccy)
         end
-        note over db
-            Same triggers and constraints as in the one-time transfer:
-            balance update via trigger, chk_balance, FK on currency,
-            trg_ledger_balanced checked at COMMIT
-        end note
         api -> db : UPDATE scheduled_transactions SET next_run_at = :new_next_run WHERE id = :order_id
         api -> db : COMMIT
         alt DB error on INSERT or COMMIT

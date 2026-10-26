@@ -44,10 +44,4 @@ else authenticated
         end
     end
 end
-
-note over api, db
-No balance check at creation time - funds and (if needed) the exchange rate
-are evaluated when the transfer is executed. The order runs until the customer
-cancels it (status = 'CANCELLED'). Executed by the Scheduled Job Worker (separate flow).
-end note
 @enduml

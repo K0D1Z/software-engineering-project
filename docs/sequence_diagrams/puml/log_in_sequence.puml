@@ -41,10 +41,4 @@ else payload valid
         end
     end
 end
-
-note over api, db
-    Login only reads the database - no session row is stored.
-    Later requests are authenticated by the token signature and expiry;
-    the role and status are read from the users table again where an endpoint needs them.
-end note
 @enduml

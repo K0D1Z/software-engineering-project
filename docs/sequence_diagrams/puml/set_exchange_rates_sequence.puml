@@ -45,11 +45,4 @@ else token valid
         end
     end
 end
-
-note over api, db
-Rates are never updated: each change inserts new rows (both directions),
-the current rate of a pair is its newest row
-(ORDER BY rate_timestamp DESC, id DESC LIMIT 1). Old rows keep the history.
-Transfers already in progress keep the rate they read before the change.
-end note
 @enduml

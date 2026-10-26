@@ -37,11 +37,6 @@ else token valid
             else currency exists
                 api -> api : Generates a unique account number (PL IBAN, 28 characters)
                 api -> db : BEGIN;\nINSERT INTO accounts (id = uuid4(), user_id, currency_code, account_number,\naccount_type = 'CUSTOMER', status = 'ACTIVE', balance = 0)\nRETURNING id, account_number;\nCOMMIT
-                note over db
-                    chk_account_owner: a CUSTOMER account must have user_id;
-                    accounts_balance_guard: a new account must start with balance 0;
-                    UNIQUE (account_number): a collision is retried with a new number (max 3 attempts)
-                end note
                 alt DB error (e.g. unique_violation after 3 attempts)
                     db --> api : error
                     api -> db : ROLLBACK

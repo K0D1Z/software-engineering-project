@@ -25,19 +25,19 @@ skinparam database {
 }
 top to bottom direction
 
-' ===== Scheduled jobs =====
+
 package "Scheduled Job Worker" {
   [Standing Order Executor] as Worker <<StandingOrderTask>>
 }
 
-' ===== Presentation layer =====
+
 package "Presentation Layer" {
   interface "HTTPS" as IRest
   [REST API] as Api
 }
 Api -up- IRest
 
-' ===== Business logic layer =====
+
 package "Business Logic Layer" {
   [Reports] as Reports <<ReportService>>
   [Exchange Rates] as Rates <<ExchangeRateService>>
@@ -61,7 +61,7 @@ Tx -up- ITx
 Rates -up- IRates
 Reports -up- IReports
 
-' ===== Data access layer =====
+
 package "Data Access Layer" {
   interface IUnitOfWork as IUow
   [Unit of Work + Repositories] as Uow <<UnitOfWork>>
@@ -74,7 +74,7 @@ package "Data Layer" {
 }
 Db -up- ISession
 
-' ===== Dependencies =====
+
 Worker ..> IRest : <<use>>
 
 Api ..> IReports : <<use>>

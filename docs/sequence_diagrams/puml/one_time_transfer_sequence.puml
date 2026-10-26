@@ -88,4 +88,10 @@ else authenticated
                 else committed
                     db --> api : committed
                     api --> spa : 201 Created {transactionId, referenceNumber, newBalance}
-                    spa -->
+                    spa --> customer : Shows confirmation and the updated balance
+                end
+            end
+        end
+    end
+end
+@enduml

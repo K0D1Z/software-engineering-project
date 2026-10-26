@@ -56,12 +56,6 @@ else token valid
                     spa --> customer : Shows error message
                 else no active standing transfers
                     api -> db : UPDATE accounts SET status = 'CLOSED' WHERE id = :accountId;\nCOMMIT
-                    note over db
-                        The account row is not deleted: ledger entries reference it (FK)
-                        and the ledger is append-only, so history and statements stay intact.
-                        A CLOSED account is rejected by transfers, deposits and withdrawals (status <> 'ACTIVE');
-                        standing transfers pointing to it are REJECTED by the worker.
-                    end note
                     alt DB error on UPDATE or COMMIT
                         db --> api : error
                         api -> db : ROLLBACK

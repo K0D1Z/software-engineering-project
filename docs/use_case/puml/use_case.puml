@@ -12,6 +12,8 @@ actor "Bank\nAdministrator" as Admin
 actor Scheduler
 
 rectangle "Banking System" {
+  usecase "Log in" as UC_Login
+
   usecase "Open account" as UC_OpenAccount
   usecase "Close account" as UC_CloseAccount
   usecase "Check account balance" as UC_AccountBalance
@@ -33,6 +35,9 @@ rectangle "Banking System" {
   usecase "Print account\nstatement" as UC_PrintStatement
   usecase "Set exchange rates" as UC_SetRates
 }
+
+Customer --- UC_Login
+UC_Login --- Admin
 
 Customer -- UC_OpenAccount
 Customer -- UC_CloseAccount
@@ -65,4 +70,5 @@ UC_OneTimeTransfer -[hidden]- UC_PrintStatement
 UC_OneTimeTransfer -[hidden]- UC_SetRates
 UC_OneTimeTransfer -[hidden]-UC_ScheduledTransfers
 
+UC_Login -[hidden] UC_OneTimeTransfer
 @enduml

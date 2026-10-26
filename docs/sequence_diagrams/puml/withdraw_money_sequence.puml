@@ -57,12 +57,6 @@ else token valid
                     else checks passed
                         api -> db : INSERT INTO transactions\n(id = uuid4(), reference_number, description, status = 'POSTED', initiated_by = :user_id)
                         api -> db : INSERT INTO ledger (2 entries, id = uuid4() each):\nDEBIT customer account (amount), CREDIT INTERNAL (amount)
-                        note over db
-                            trg_ledger_apply_balance updates accounts.balance;
-                            CHECK chk_balance fails immediately if the balance would drop below 0 (safety net after the check in the API);
-                            FK (account_id, currency_code) enforces each entry is in the account's currency;
-                            trg_ledger_balanced (DEFERRED) checks DEBIT = CREDIT per currency at COMMIT.
-                        end note
                         api -> db : SELECT balance FROM accounts WHERE id = :accountId
                         db --> api : new balance
                         api -> db : COMMIT

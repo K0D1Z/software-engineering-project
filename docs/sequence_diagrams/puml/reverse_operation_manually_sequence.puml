@@ -77,12 +77,6 @@ else active ADMIN
             else reversal possible
                 api -> db : INSERT INTO transactions (id = uuid4(), reference_number,\ndescription = 'Reversal of <original TRN>: <reason>',\nstatus = 'POSTED', reverses_transaction_id = :originalId)
                 api -> db : INSERT INTO ledger: for each original entry, a new entry with\nthe opposite entry_type, same account_id, amount and currency_code
-                note over db
-                    trg_ledger_apply_balance restores the balances;
-                    chk_balance guards customer accounts;
-                    uq_tx_reversed_once blocks a second reversal of the same transaction;
-                    trg_ledger_balanced checks DEBIT = CREDIT per currency at COMMIT
-                end note
                 api -> db : UPDATE transactions SET status = 'REVERSED' WHERE id = :originalId
                 api -> db : COMMIT
                 alt DB error on INSERT or COMMIT (check_violation / unique_violation / not balanced)
