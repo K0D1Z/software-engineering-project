@@ -1,0 +1,80 @@
+@startuml
+title Close account
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 260
+
+actor "Customer" as customer
+participant "Customer Web App\n(React SPA)" as spa
+participant "Core Banking API\n(FastAPI)" as api
+database "PostgreSQL" as db
+
+customer -> spa : Selects an account on the Dashboard, clicks "Close account" and confirms
+spa -> api : POST /accounts/{accountNumber}/close
+api -> api : Authenticates the token (signature, expiry) and reads user id
+
+alt invalid or missing token
+    api --> spa : 401 Unauthorized
+    spa --> customer : Redirects to login
+else token valid
+    api -> db : SELECT role, status FROM users WHERE id = :user_id
+    db --> api : role, status
+    alt status <> 'ACTIVE'
+        api --> spa : 403 Forbidden
+        spa --> customer : Shows "access denied"
+    else active user
+        api -> api : Validates the account number format (IBAN)
+        alt invalid account number
+            api --> spa : 422 Unprocessable Entity
+            spa --> customer : Shows validation error
+        else account number valid
+            api -> db : BEGIN;\nSELECT id, user_id, status, balance, account_type FROM accounts\nWHERE account_number = :accountNumber FOR UPDATE
+            db --> api : account row locked (or no row)
+            alt account not found
+                api -> db : ROLLBACK
+                api --> spa : 404 Not Found
+                spa --> customer : Shows error message
+            else not owned by user or account_type = 'INTERNAL'
+                api -> db : ROLLBACK
+                api --> spa : 403 Forbidden
+                spa --> customer : Shows error message
+            else status <> 'ACTIVE' (already CLOSED or FROZEN)
+                api -> db : ROLLBACK
+                api --> spa : 409 Conflict
+                spa --> customer : Shows "account cannot be closed"
+            else balance <> 0
+                api -> db : ROLLBACK
+                api --> spa : 409 Conflict {"Withdraw or transfer the remaining funds first"}
+                spa --> customer : Shows error message
+            else account can be closed (checked so far)
+                api -> db : SELECT count(*) FROM scheduled_transactions\nWHERE source_account_id = :accountId AND status = 'ACTIVE'
+                db --> api : number of active standing transfers
+                alt active standing transfers exist
+                    api -> db : ROLLBACK
+                    api --> spa : 409 Conflict {"Cancel the standing transfers first"}
+                    spa --> customer : Shows error message
+                else no active standing transfers
+                    api -> db : UPDATE accounts SET status = 'CLOSED' WHERE id = :accountId;\nCOMMIT
+                    note over db
+                        The account row is not deleted: ledger entries reference it (FK)
+                        and the ledger is append-only, so history and statements stay intact.
+                        A CLOSED account is rejected by transfers, deposits and withdrawals (status <> 'ACTIVE');
+                        standing transfers pointing to it are REJECTED by the worker.
+                    end note
+                    alt DB error on UPDATE or COMMIT
+                        db --> api : error
+                        api -> db : ROLLBACK
+                        api --> spa : 500 Internal Server Error
+                        spa --> customer : Shows error message
+                    else committed
+                        db --> api : committed
+                        api --> spa : 200 OK {accountNumber, status = CLOSED}
+                        spa --> customer : Removes the account from the active accounts list
+                    end
+                end
+            end
+        end
+    end
+end
+@enduml
