@@ -1,0 +1,59 @@
+@startuml
+title Open account
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 260
+
+actor "Customer" as customer
+participant "Customer Web App\n(React SPA)" as spa
+participant "Core Banking API\n(FastAPI)" as api
+database "PostgreSQL" as db
+
+customer -> spa : Clicks "Open account" on the Dashboard and chooses the currency
+spa -> api : POST /accounts {currencyCode}
+api -> api : Authenticates the token (signature, expiry) and reads user id
+
+alt invalid or missing token
+    api --> spa : 401 Unauthorized
+    spa --> customer : Redirects to login
+else token valid
+    api -> db : SELECT role, status FROM users WHERE id = :user_id
+    db --> api : role, status
+    alt status <> 'ACTIVE'
+        api --> spa : 403 Forbidden
+        spa --> customer : Shows "access denied"
+    else active user
+        api -> api : Normalizes the code to upper case and validates the payload (code matches ^[A-Z]{3}$)
+        alt invalid payload
+            api --> spa : 422 Unprocessable Entity (validation errors)
+            spa --> customer : Shows validation errors
+        else payload valid
+            api -> db : SELECT code FROM currencies WHERE code = :currencyCode
+            db --> api : currency row (or no row)
+            alt unknown currency
+                api --> spa : 422 Unprocessable Entity (unknown currency)
+                spa --> customer : Shows error message
+            else currency exists
+                api -> api : Generates a unique account number (PL IBAN, 28 characters)
+                api -> db : BEGIN;\nINSERT INTO accounts (id = uuid4(), user_id, currency_code, account_number,\naccount_type = 'CUSTOMER', status = 'ACTIVE', balance = 0)\nRETURNING id, account_number;\nCOMMIT
+                note over db
+                    chk_account_owner: a CUSTOMER account must have user_id;
+                    accounts_balance_guard: a new account must start with balance 0;
+                    UNIQUE (account_number): a collision is retried with a new number (max 3 attempts)
+                end note
+                alt DB error (e.g. unique_violation after 3 attempts)
+                    db --> api : error
+                    api -> db : ROLLBACK
+                    api --> spa : 500 Internal Server Error
+                    spa --> customer : Shows error message
+                else committed
+                    db --> api : new account row
+                    api --> spa : 201 Created {accountNumber, currencyCode, balance = 0.0000, status = ACTIVE}
+                    spa --> customer : Shows the new account on the Dashboard
+                end
+            end
+        end
+    end
+end
+@enduml
