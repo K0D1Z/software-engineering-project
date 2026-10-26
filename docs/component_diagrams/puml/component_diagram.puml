@@ -1,0 +1,98 @@
+@startuml minibank_components
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam ArrowColor #555555
+skinparam package {
+  BackgroundColor #FAFAFA
+  BorderColor #888888
+  FontStyle bold
+}
+skinparam component {
+  BackgroundColor #E8F0FE
+  BorderColor #3B6FB6
+}
+skinparam interface {
+  BackgroundColor #FFFFFF
+  BorderColor #3B6FB6
+}
+skinparam database {
+  BackgroundColor #FFF4E0
+  BorderColor #B7812C
+}
+top to bottom direction
+
+' ===== Scheduled jobs =====
+package "Scheduled Job Worker" {
+  [Standing Order Executor] as Worker <<StandingOrderTask>>
+}
+
+' ===== Presentation layer =====
+package "Presentation Layer" {
+  interface "HTTPS" as IRest
+  [REST API] as Api
+}
+Api -up- IRest
+
+' ===== Business logic layer =====
+package "Business Logic Layer" {
+  [Reports] as Reports <<ReportService>>
+  [Exchange Rates] as Rates <<ExchangeRateService>>
+  [Transactions] as Tx <<TransactionService>>
+  [Accounts] as Accounts <<AccountService>>
+  [Users] as Users <<UserService>>
+  [Authentication] as Auth <<AuthService>>
+}
+
+interface IAuthentication as IAuth
+interface IUsers
+interface IAccounts
+interface ITransactions as ITx
+interface IExchangeRates as IRates
+interface IReports
+
+Auth -up- IAuth
+Users -up- IUsers
+Accounts -up- IAccounts
+Tx -up- ITx
+Rates -up- IRates
+Reports -up- IReports
+
+' ===== Data access layer =====
+package "Data Access Layer" {
+  interface IUnitOfWork as IUow
+  [Unit of Work + Repositories] as Uow <<UnitOfWork>>
+}
+Uow -up- IUow
+
+package "Data Layer" {
+  interface "DbSession" as ISession
+  database "Database" as Db
+}
+Db -up- ISession
+
+' ===== Dependencies =====
+Worker ..> IRest : <<use>>
+
+Api ..> IReports : <<use>>
+Api ..> IRates : <<use>>
+Api ..> ITx : <<use>>
+Api ..> IAccounts : <<use>>
+Api ..> IUsers : <<use>>
+Api ..> IAuth : <<use>>
+
+Tx ..> IRates : <<use>>
+
+Auth ..> IUow : <<use>>
+Users ..> IUow : <<use>>
+Accounts ..> IUow : <<use>>
+Tx ..> IUow : <<use>>
+Rates ..> IUow : <<use>>
+Reports ..> IUow : <<use>>
+
+Uow ..> ISession : <<use>>
+
+@enduml
