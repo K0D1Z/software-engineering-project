@@ -10,39 +10,94 @@ participant "Admin Web App\n(React SPA)" as spa
 participant "Core Banking API\n(FastAPI)" as api
 database "PostgreSQL" as db
 
+== Search ==
 admin -> spa : Enters Reference Number (TRN) and clicks "Search"
 spa -> api : GET /admin/transactions/by-reference/{referenceNumber}
-api -> api : Authenticates user & verifies ADMIN role
-api -> db : SELECT * FROM transactions WHERE reference_number = :ref
-db --> api : original transaction details
-spa --> admin : Displays transaction details and "Reverse Transaction" button
+api -> api : Authenticates the token and reads user id
+alt invalid or missing token
+    api --> spa : 401 Unauthorized
+    spa --> admin : Redirects to login
+else token valid
+    api -> db : SELECT role, status FROM users WHERE id = :user_id
+    db --> api : role, status
+    alt status <> 'ACTIVE' or role <> 'ADMIN'
+        api --> spa : 403 Forbidden
+        spa --> admin : Shows "access denied"
+    else active ADMIN
+        api -> db : SELECT * FROM transactions WHERE reference_number = :ref
+        db --> api : transaction row (or no row)
+        alt not found
+            api --> spa : 404 Not Found
+            spa --> admin : Shows "transaction not found"
+        else found
+            api -> db : SELECT account_id, entry_type, amount, currency_code FROM ledger WHERE transaction_id = :id;\nSELECT id, reference_number FROM transactions WHERE reverses_transaction_id = :id
+            db --> api : ledger entries, reversing transaction (if any)
+            api --> spa : 200 OK {transaction, ledgerEntries, reversedBy, canReverse}
+            spa --> admin : Displays details; "Reverse Transaction" button only if canReverse\n(status = 'POSTED' and not itself a reversal)
+        end
+    end
+end
 
-admin -> spa : Clicks "Reverse Transaction" (provides reason)
+== Reverse ==
+admin -> spa : Clicks "Reverse Transaction" and provides a reason
 spa -> api : POST /admin/transactions/{originalId}/reverse {reason}
-api -> api : Verifies ADMIN role and validates reason
-api -> db : BEGIN;\nSELECT * FROM transactions WHERE id = :originalId FOR UPDATE
-db --> api : transaction row locked
+api -> api : Authenticates the token
+api -> db : SELECT role, status FROM users WHERE id = :user_id
+db --> api : role, status
+alt not an active ADMIN
+    api --> spa : 401 / 403
+    spa --> admin : Shows error message
+else active ADMIN
+    api -> api : Validates reason (not empty, max length)
+    alt invalid reason
+        api --> spa : 422 Unprocessable Entity
+        spa --> admin : Shows validation error
+    else reason valid
+        api -> db : BEGIN;\nSELECT * FROM transactions WHERE id = :originalId FOR UPDATE
+        db --> api : transaction row locked (or no row)
 
-alt transaction already reversed (uq_tx_reversed_once) OR status != 'POSTED'
-    api -> db : ROLLBACK
-    api --> spa : 409 Conflict (Transaction already reversed or invalid status)
-    spa --> admin : Shows error: Cannot reverse transaction
-else transaction eligible for reversal
-    api -> db : SELECT * FROM ledger WHERE transaction_id = :originalId
-    db --> api : original ledger entries (DEBIT, CREDIT)
-    api -> db : SELECT id, balance FROM accounts WHERE id IN (original account_ids) ORDER BY id FOR UPDATE
-    db --> api : accounts locked
-    
-    api -> db : INSERT INTO transactions\n(id, reference_number, description, status = 'POSTED', reverses_transaction_id = :originalId)
-    api -> db : INSERT INTO ledger: inverted entries\n(CREDIT on original source, DEBIT on original target)
-    note over db
-        Triggers update balances back and assert zero-sum balance
-    end note
-    api -> db : UPDATE transactions SET status = 'REVERSED' WHERE id = :originalId
-    api -> db : COMMIT
-    db --> api : committed
-    
-    api --> spa : 200 OK {reversalTransactionId, newReferenceNumber, status: 'POSTED'}
-    spa --> admin : Shows success confirmation
+        alt not found
+            api -> db : ROLLBACK
+            api --> spa : 404 Not Found
+            spa --> admin : Shows error message
+        else status <> 'POSTED' or reverses_transaction_id IS NOT NULL
+            api -> db : ROLLBACK
+            api --> spa : 409 Conflict (already reversed, not posted, or is itself a reversal)
+            spa --> admin : Shows "cannot reverse this transaction"
+        else eligible for reversal
+            api -> db : SELECT account_id, entry_type, amount, currency_code\nFROM ledger WHERE transaction_id = :originalId
+            db --> api : original ledger entries (2 or 4)
+            api -> db : SELECT id, balance, status, account_type FROM accounts\nWHERE id IN (account_ids from entries) ORDER BY id FOR UPDATE
+            db --> api : involved accounts locked
+
+            alt any account CLOSED or a CUSTOMER account would go below 0 after reversal
+                api -> db : ROLLBACK
+                api --> spa : 422 Unprocessable Entity (account closed / insufficient funds for reversal)
+                spa --> admin : Shows error message
+            else reversal possible
+                api -> db : INSERT INTO transactions (id = uuid4(), reference_number,\ndescription = 'Reversal of <original TRN>: <reason>',\nstatus = 'POSTED', reverses_transaction_id = :originalId)
+                api -> db : INSERT INTO ledger: for each original entry, a new entry with\nthe opposite entry_type, same account_id, amount and currency_code
+                note over db
+                    trg_ledger_apply_balance restores the balances;
+                    chk_balance guards customer accounts;
+                    uq_tx_reversed_once blocks a second reversal of the same transaction;
+                    trg_ledger_balanced checks DEBIT = CREDIT per currency at COMMIT
+                end note
+                api -> db : UPDATE transactions SET status = 'REVERSED' WHERE id = :originalId
+                api -> db : COMMIT
+                alt DB error on INSERT or COMMIT (check_violation / unique_violation / not balanced)
+                    db --> api : error
+                    api -> db : ROLLBACK
+                    api --> spa : 409 / 422 / 500
+                    spa --> admin : Shows error message
+                else committed
+                    db --> api : committed
+                    api -> api : Logs the reversal (admin user id, original TRN, reason) to the audit log
+                    api --> spa : 201 Created {reversalTransactionId, referenceNumber, originalStatus: 'REVERSED'}
+                    spa --> admin : Shows success confirmation
+                end
+            end
+        end
+    end
 end
 @enduml

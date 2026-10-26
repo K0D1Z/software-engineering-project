@@ -9,45 +9,83 @@ participant "Customer Web App\n(React SPA)" as spa
 participant "Core Banking API\n(FastAPI)" as api
 database "PostgreSQL" as db
 
-customer -> spa : Fills in the New Transfer form: source account, recipient IBAN, amount, currency, description
-opt currency differs from the source account currency (conversion preview)
-spa -> api : GET /exchange-rates/latest?base=EUR&target=PLN
-api -> db : SELECT rate FROM exchange_rates WHERE base/target match ORDER BY rate_timestamp DESC LIMIT 1
-db --> api : rate, rate_timestamp
-api --> spa : current rate
-spa --> customer : Shows Currency Conversion box: current rate and estimated total charge
+customer -> spa : Fills in the New Transfer form: source account, recipient account number (IBAN), amount (in source account currency), description
+spa -> api : GET /accounts/lookup?accountNumber=:iban
+api -> db : SELECT currency_code FROM accounts\nWHERE account_number = :iban AND account_type = 'CUSTOMER'
+db --> api : recipient currency_code (or no row)
+api --> spa : {currencyCode} / 404
+
+opt source currency_code <> recipient currency_code (conversion preview)
+    spa -> api : GET /exchange-rates/latest?base={source ccy}&target={recipient ccy}
+    api -> db : SELECT rate, rate_timestamp FROM exchange_rates\nWHERE base_currency = :base AND target_currency = :target\nORDER BY rate_timestamp DESC LIMIT 1
+    db --> api : rate, rate_timestamp
+    api --> spa : current rate
+    spa --> customer : Shows Currency Conversion box: current rate and estimated amount received (estimate only)
 end
+
 customer -> spa : Clicks Make a Transfer
-spa -> api : POST /transfers {sourceAccountId, recipientAccountNumber, amount, currency, description}
-api -> api : Authenticates the user (token) and validates the payload (amount > 0, IBAN format)
-api -> db : BEGIN; SELECT ... FROM accounts WHERE id = :source OR account_number = :recipient ORDER BY id FOR UPDATE
-db --> api : both account rows locked
-alt source not owned by user / account not ACTIVE / recipient not found
-api -> db : ROLLBACK
-api --> spa : 403 / 404 / 422 error
-spa --> customer : Shows error message
-else accounts are valid
-opt currencies differ (Convert currency)
-api -> api : Converts: converted amount = amount x latest rate (Decimal, 4 decimal places)
-note over api
-Ledger must balance per currency, so a conversion is booked as 4 entries via the INTERNAL account (design proposal)
-end note
-end
-api -> db : INSERT INTO transactions (reference_number, description, status = POSTED)
-api -> db : INSERT INTO ledger: DEBIT on source account, CREDIT on recipient account
-note over db
-Triggers: ledger_apply_to_balance updates balances, chk_balance rejects balance < 0, trg_ledger_balanced checks DEBIT = CREDIT at COMMIT
-end note
-alt insufficient funds (chk_balance violated)
-db --> api : error: check_violation
-api -> db : ROLLBACK
-api --> spa : 422 Insufficient funds
-spa --> customer : Shows 'insufficient funds'
-else success
-api -> db : COMMIT
-db --> api : committed
-api --> spa : 201 Created {transactionId, referenceNumber, newBalance}
-spa --> customer : Shows confirmation and the updated balance
-end
-end
-@enduml
+spa -> api : POST /transfers {sourceAccountId, recipientAccountNumber, amount, description}
+api -> api : Authenticates the user (token)
+
+alt invalid or missing token
+    api --> spa : 401 Unauthorized
+    spa --> customer : Redirects to login
+else authenticated
+    api -> api : Validates the payload (amount > 0, max 2 decimal places, IBAN format, description not empty)
+    alt invalid payload
+        api --> spa : 422 validation error
+        spa --> customer : Shows validation errors
+    else payload valid
+        api -> db : SELECT id, user_id, status, currency_code, account_type FROM accounts\nWHERE id = :sourceAccountId OR account_number = :recipientAccountNumber
+        db --> api : source and recipient account rows
+        alt source not owned by user
+            api --> spa : 403 Forbidden
+            spa --> customer : Shows error message
+        else recipient not found
+            api --> spa : 404 Not Found
+            spa --> customer : Shows error message
+        else account not ACTIVE / source = recipient
+            api --> spa : 422 Unprocessable Entity
+            spa --> customer : Shows error message
+        else accounts are valid
+            opt currencies differ (Convert currency)
+                api -> db : SELECT id, currency_code FROM accounts\nWHERE account_type = 'INTERNAL' AND currency_code IN (:source_ccy, :target_ccy)
+                db --> api : INTERNAL account for each currency
+                api -> db : SELECT rate FROM exchange_rates\nWHERE base_currency = :source_ccy AND target_currency = :target_ccy\nORDER BY rate_timestamp DESC LIMIT 1
+                db --> api : rate (if no row: reversed pair is read and 1/rate is used)
+                api -> api : converted amount = ROUND(amount x rate, 2)
+            end
+
+            api -> db : BEGIN;\nSELECT id, balance, status FROM accounts\nWHERE id IN (source, recipient, [INTERNAL source ccy, INTERNAL target ccy])\nORDER BY id FOR UPDATE
+            db --> api : all involved accounts locked (fixed order, no deadlocks)
+
+            alt account no longer ACTIVE or source balance < amount
+                api -> db : ROLLBACK
+                api --> spa : 422 Account inactive / Insufficient funds
+                spa --> customer : Shows error message
+            else checks passed
+                api -> db : INSERT INTO transactions\n(id = uuid4(), reference_number, description, status = 'POSTED')
+                alt same currency
+                    api -> db : INSERT INTO ledger (2 entries, id = uuid4() each):\nDEBIT source (amount), CREDIT recipient (amount)
+                else currencies differ (4 entries, balanced per currency)
+                    api -> db : INSERT INTO ledger (4 entries, one transaction_id):\n1. DEBIT source (amount, source ccy)\n2. CREDIT INTERNAL (amount, source ccy)\n3. DEBIT INTERNAL (converted amount, target ccy)\n4. CREDIT recipient (converted amount, target ccy)
+                end
+                note over db
+                    trg_ledger_apply_balance updates accounts.balance
+                    (allowed by accounts_balance_guard only at trigger depth 2);
+                    CHECK chk_balance (not for INTERNAL) fails immediately on overdraft;
+                    FK (account_id, currency_code) enforces each entry is in the account's currency;
+                    trg_ledger_balanced (DEFERRED) checks DEBIT = CREDIT per currency at COMMIT
+                end note
+                api -> db : SELECT balance FROM accounts WHERE id = :sourceAccountId
+                db --> api : new balance
+                api -> db : COMMIT
+                alt DB error on INSERT or COMMIT (check_violation / transaction not balanced)
+                    db --> api : error
+                    api -> db : ROLLBACK
+                    api --> spa : 422 Insufficient funds / 500 Internal error
+                    spa --> customer : Shows error message
+                else committed
+                    db --> api : committed
+                    api --> spa : 201 Created {transactionId, referenceNumber, newBalance}
+                    spa -->

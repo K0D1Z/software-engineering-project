@@ -14,9 +14,11 @@ CREATE TABLE "users" (
   "email" varchar(255) UNIQUE NOT NULL,
   "phone_number" varchar(20) NOT NULL,
   "password_hash" varchar(255) NOT NULL,
+  "role" varchar(20) NOT NULL DEFAULT 'CUSTOMER',                      
   "created_at" timestamp NOT NULL DEFAULT (now()),
   "status" varchar(20) NOT NULL DEFAULT 'ACTIVE',
   CONSTRAINT chk_user_status CHECK ("status" IN ('ACTIVE','DELETED', 'PENDING', 'BLOCKED')),
+  CONSTRAINT chk_user_role CHECK ("role" IN ('CUSTOMER', 'ADMIN')),    
   CONSTRAINT chk_pesel CHECK ("pesel" ~ '^[0-9]{11}$')
 );
 
@@ -38,7 +40,7 @@ CREATE TABLE "addresses" (
 CREATE TABLE "accounts" (
   "id" uuid PRIMARY KEY,
   "user_id" uuid,
-  "balance" numeric(18,4) NOT NULL DEFAULT 0,  
+  "balance" numeric(18,4) NOT NULL DEFAULT 0,
   "currency_code" varchar(3) NOT NULL,
   "account_number" varchar(34) UNIQUE NOT NULL,
   "account_type" varchar(20) NOT NULL DEFAULT 'CUSTOMER',
@@ -62,8 +64,8 @@ CREATE TABLE "transactions" (
   "executed_at" timestamp NOT NULL DEFAULT (now()),
   "reverses_transaction_id" uuid,
   "scheduled_transaction_id" uuid,
+  "initiated_by" uuid,                                                  
   CONSTRAINT chk_no_self_reverse CHECK ("reverses_transaction_id" <> "id"),
-  CONSTRAINT uq_tx_reversed_once UNIQUE ("reverses_transaction_id"),
   CONSTRAINT chk_tx_status CHECK ("status" IN ('PENDING','POSTED','REVERSED', 'REJECTED'))
 );
 
@@ -86,7 +88,7 @@ CREATE TABLE "exchange_rates" (
   "rate" numeric(12,6) NOT NULL,
   "rate_timestamp" timestamp NOT NULL DEFAULT (now()),
   CONSTRAINT chk_rate_positive CHECK ("rate" > 0),
-  CONSTRAINT chk_rate_currencies CHECK ("base_currency" <> "target_currency")  
+  CONSTRAINT chk_rate_currencies CHECK ("base_currency" <> "target_currency")
 );
 
 CREATE TABLE "scheduled_transactions" (
@@ -121,6 +123,8 @@ ALTER TABLE "exchange_rates" ADD FOREIGN KEY ("target_currency") REFERENCES "cur
 
 ALTER TABLE "transactions" ADD FOREIGN KEY ("reverses_transaction_id") REFERENCES "transactions" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
+ALTER TABLE "transactions" ADD FOREIGN KEY ("initiated_by") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;  -- [CHANGE 2]
+
 ALTER TABLE "scheduled_transactions" ADD FOREIGN KEY ("source_account_id") REFERENCES "accounts" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "scheduled_transactions" ADD FOREIGN KEY ("target_account_id") REFERENCES "accounts" ("id") DEFERRABLE INITIALLY IMMEDIATE;
@@ -134,6 +138,8 @@ CREATE INDEX idx_ledger_transaction ON ledger (transaction_id);
 CREATE INDEX idx_accounts_user ON accounts (user_id);
 CREATE INDEX idx_addresses_user ON addresses (user_id);
 CREATE INDEX idx_rates_lookup ON exchange_rates (base_currency, target_currency, rate_timestamp DESC);
+CREATE UNIQUE INDEX uq_tx_reversed_once ON transactions (reverses_transaction_id)
+  WHERE "reverses_transaction_id" IS NOT NULL AND "status" <> 'REJECTED';
 
 CREATE OR REPLACE FUNCTION check_transaction_balanced() RETURNS trigger AS $$
 DECLARE

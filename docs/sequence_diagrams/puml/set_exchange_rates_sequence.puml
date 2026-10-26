@@ -10,21 +10,46 @@ participant "Core Banking API\n(FastAPI)" as api
 database "PostgreSQL" as db
 
 admin -> spa : Opens Exchange rates and enters: base currency, target currency, rate
-spa -> spa : Validates the form (rate > 0, base != target)
-spa -> api : POST /admin/exchange-rates\n {baseCurrency, targetCurrency, rate}
-api -> api : Authenticates the user (token) and checks the ADMIN role
-api -> db : SELECT code FROM currencies\n WHERE code IN (:base, :target)
-db --> api : existing currency codes
+spa -> spa : Validates the form (rate > 0, base != target, max 6 decimal places)
+spa -> api : POST /admin/exchange-rates\n{baseCurrency, targetCurrency, rate}
+api -> api : Authenticates the token (signature, expiry) and reads user id
 
-alt unknown currency or invalid rate
-api --> spa : 422 unprocesable Entity
-spa --> admin : Shows error message
-else data is valid 
-api -> db : INSERT INTO exchange_rates (base_currency, target_currency, rate)
-db --> api : id, rate_timestamp (default now())
-api --> spa : 201 Created {id, rate, rateTimestamp}
-spa --> admin : Shows confirmation
+alt invalid or missing token
+    api --> spa : 401 Unauthorized
+    spa --> admin : Redirects to login
+else token valid
+    api -> db : SELECT role, status FROM users WHERE id = :user_id
+    db --> api : role, status
+    alt status <> 'ACTIVE' or role <> 'ADMIN'
+        api --> spa : 403 Forbidden
+        spa --> admin : Shows "access denied"
+    else active ADMIN
+        api -> api : Normalizes codes to upper case and validates the payload\n(codes match ^[A-Z]{3}$, base != target, 0 < rate < 10^6, max 6 decimal places)
+        alt invalid payload
+            api --> spa : 422 Unprocessable Entity (validation errors)
+            spa --> admin : Shows validation errors
+        else payload valid
+            api -> db : SELECT code FROM currencies\nWHERE code IN (:base, :target)
+            db --> api : existing currency codes
+            alt unknown currency
+                api --> spa : 422 Unprocessable Entity (unknown currency)
+                spa --> admin : Shows error message
+            else currencies exist
+                api -> api : inverse rate = ROUND(1 / rate, 6)
+                api -> db : BEGIN;\nINSERT INTO exchange_rates (base_currency, target_currency, rate, rate_timestamp)\nVALUES (:base, :target, :rate, :now_utc),\n       (:target, :base, :inverse_rate, :now_utc)\nRETURNING id;\nCOMMIT
+                db --> api : ids of both rows
+                api -> api : Logs the change (admin user id, pair, rate) to the application audit log
+                api --> spa : 201 Created {id, baseCurrency, targetCurrency, rate, inverseRate, rateTimestamp}
+                spa --> admin : Shows confirmation and the updated rates list
+            end
+        end
+    end
 end
 
-Note over api,db : Rates are never updated, each change is a new row,\nthe current of a pair is its newest row.\nOld rows keep the history.
+note over api, db
+Rates are never updated: each change inserts new rows (both directions),
+the current rate of a pair is its newest row
+(ORDER BY rate_timestamp DESC, id DESC LIMIT 1). Old rows keep the history.
+Transfers already in progress keep the rate they read before the change.
+end note
 @enduml

@@ -1,1 +1,53 @@
-@startumltitle Order standing transferautonumberskinparam sequenceMessageAlign centerskinparam responseMessageBelowArrow falseskinparam maxMessageSize 260actor "Customer" as customerparticipant "Customer Web App\n(React SPA)" as spa  participant "Core Banking API \n(FastAPI)" as apidatabase "PostgreSQL" as dbcustomer -> spa : On Scheduled Transfers fill in:\n source account, recipient IBAN, amount, currency, description, frequencyspa -> spa : Validates the form; the chosen frequency is mapped to a cron  expression e.g. monthly = '0 0 1 * *'spa -> api : POST /standing-transfers {sourceAccountid, recipientAccountNumber, amount, currency, description, cronExpression}api -> api : Authenticates the user (token) and Validates the payload (amount > 0, cron syntax, source != recipient)api -> db : SELECT ... FROM accounts WHERE id = :source OR account_number = :recipientdb --> api : account rowsalt source not owned by user / account not ACTIVE / recipient not found / invalid cronapi --> spa : 403 / 404 / 422 errorspa --> customer : Shows error message else data is Validatesapi -> api : Computes next_run_at = first occurrence of the cron expression after now()api -> db : INSERT INTO Scheduled_transactions (source_account_id, target_account_id, currency, amount, description, cron_expression, next_run_at,\n status = 'ACTIVE')db --> api : new row idapi --> spa : 201 Created {id.nextRunAt, status = ACTIVE}spa --> customer : Shows the new entry on the Scheduled Transfers listend Note over api,db : The Scheduled job Worker later finds ACTIVE rows with\nnext_run_at <= now() and executes them through the Core Banking API\n(seperate flow)@enduml
+@startuml
+title Order standing transfer
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 260
+actor "Customer" as customer
+participant "Customer Web App\n(React SPA)" as spa
+participant "Core Banking API\n(FastAPI)" as api
+database "PostgreSQL" as db
+
+customer -> spa : On Scheduled Transfers fills in: source account, recipient account number (IBAN), amount, description, frequency, start date
+spa -> spa : Validates the form (required fields, amount > 0, start date >= today)
+spa -> api : POST /scheduled-transactions {sourceAccountId, recipientAccountNumber, amount, description, frequency, startDate}
+api -> api : Authenticates the user (token)
+
+alt invalid or missing token
+    api --> spa : 401 Unauthorized
+    spa --> customer : Redirects to login
+else authenticated
+    api -> api : Validates the payload (amount > 0, IBAN format, frequency in {WEEKLY, MONTHLY, ...}, startDate >= today)
+    alt invalid payload
+        api --> spa : 422 validation error
+        spa --> customer : Shows validation errors
+    else payload valid
+        api -> db : SELECT id, user_id, status, currency_code FROM accounts\nWHERE id = :sourceAccountId OR account_number = :recipientAccountNumber
+        db --> api : account rows
+        alt source not owned by user
+            api --> spa : 403 Forbidden
+            spa --> customer : Shows error message
+        else recipient not found
+            api --> spa : 404 Not Found
+            spa --> customer : Shows error message
+        else account not ACTIVE / source = recipient
+            api --> spa : 422 Unprocessable Entity
+            spa --> customer : Shows error message
+        else data is valid
+            api -> api : Maps frequency + startDate to cron_expression (Europe/Warsaw),\ne.g. MONTHLY from the 10th -> '0 0 10 * *'
+            api -> api : Computes next_run_at = first occurrence >= startDate, converted to UTC
+            api -> db : INSERT INTO scheduled_transactions (id = uuid4(), source_account_id, target_account_id,\ncurrency = source.currency_code, amount, description, cron_expression, next_run_at, status = 'ACTIVE')
+            db --> api : inserted
+            api --> spa : 201 Created {id, nextRunAt, status: "ACTIVE"}
+            spa --> customer : Shows the new entry on the Scheduled Transfers list
+        end
+    end
+end
+
+note over api, db
+No balance check at creation time - funds and (if needed) the exchange rate
+are evaluated when the transfer is executed. The order runs until the customer
+cancels it (status = 'CANCELLED'). Executed by the Scheduled Job Worker (separate flow).
+end note
+@enduml

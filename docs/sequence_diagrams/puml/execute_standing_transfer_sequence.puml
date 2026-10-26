@@ -1,41 +1,70 @@
 @startuml
-title Execute standing transfer
+title Execute standing transfers
 autonumber
 skinparam sequenceMessageAlign center
 skinparam responseMessageBelowArrow false
 skinparam maxMessageSize 260
 
-participant "Scheduled Job Worker\n(Celery Beat)" as worker
+participant "Scheduled Job Worker\n(Celery Beat + Worker)" as worker
 participant "Core Banking API\n(FastAPI)" as api
 database "PostgreSQL" as db
 
-worker -> api : POST /internal/standing-orders/execute-due\nHeaders: {Authorization: Bearer <service_token>}
+worker -> api : POST /internal/scheduled-transactions/execute-due\nAuthorization: Bearer <service_token>
 api -> api : Authenticates service token
-api -> db : SELECT * FROM scheduled_transactions\nWHERE status = 'ACTIVE' AND next_run_at <= now()\nLIMIT 50 FOR UPDATE SKIP LOCKED
-db --> api : due standing orders
 
-loop for each standing order
-    api -> db : BEGIN;\nSELECT id, balance, status FROM accounts\nWHERE id IN (:source_id, :target_id) ORDER BY id FOR UPDATE
-    db --> api : source & target accounts locked
-    
-    alt source account FROZEN or balance < amount (insufficient funds)
-        api -> db : ROLLBACK
-        note over api, db
-            Transaction is skipped for this execution cycle.
-            Optionally increments retry count or records audit warning.
-        end note
-    else sufficient funds & accounts ACTIVE
-        api -> db : INSERT INTO transactions\n(id, reference_number, description, status = 'POSTED', scheduled_transaction_id = :order_id)
-        api -> db : INSERT INTO ledger: DEBIT on source, CREDIT on target
-        note over db
-            Triggers update balances and verify ledger integrity (DEFERRABLE DEFERRED)
-        end note
-        api -> api : Computes new_next_run = next occurrence based on cron_expression
-        api -> db : UPDATE scheduled_transactions\nSET next_run_at = :new_next_run WHERE id = :order_id
+alt invalid service token
+    api --> worker : 401 Unauthorized
+else authenticated
+
+loop until no due orders left or batch limit (50) reached
+    api -> db : BEGIN;\nSELECT * FROM scheduled_transactions\nWHERE status = 'ACTIVE' AND next_run_at <= :now_utc\nORDER BY next_run_at LIMIT 1\nFOR UPDATE SKIP LOCKED
+    db --> api : one due order (row locked until COMMIT)
+
+    note over api, db
+        The order row stays locked until COMMIT, so parallel workers skip it.
+        next_run_at is advanced in the same transaction - no double execution.
+    end note
+
+    api -> db : SELECT id, balance, status, currency_code, account_type FROM accounts\nWHERE id IN (:source, :target, [INTERNAL source ccy, INTERNAL target ccy])\nORDER BY id FOR UPDATE
+    db --> api : involved accounts locked
+
+    opt source.currency_code <> target.currency_code
+        api -> db : SELECT rate FROM exchange_rates\nWHERE base_currency = :source_ccy AND target_currency = :target_ccy\nORDER BY rate_timestamp DESC LIMIT 1
+        db --> api : rate (if no row: reversed pair and 1/rate)
+        api -> api : converted amount = ROUND(amount x rate, 2)
+    end
+
+    api -> api : new_next_run = next cron occurrence after max(next_run_at, now_utc)
+
+    alt any account status <> 'ACTIVE' or source.balance < amount
+        api -> db : INSERT INTO transactions (id = uuid4(), reference_number, description,\nstatus = 'REJECTED', scheduled_transaction_id) -- no ledger entries
+        api -> db : UPDATE scheduled_transactions SET next_run_at = :new_next_run WHERE id = :order_id
         api -> db : COMMIT
-        db --> api : committed
+        db --> api : rejection recorded, this cycle skipped, locks released
+    else accounts ACTIVE and sufficient funds
+        api -> db : INSERT INTO transactions (id = uuid4(), reference_number, description,\nstatus = 'POSTED', scheduled_transaction_id)
+        alt same currency
+            api -> db : INSERT INTO ledger (2 entries):\nDEBIT source (amount), CREDIT target (amount)
+        else currencies differ
+            api -> db : INSERT INTO ledger (4 entries):\nDEBIT source / CREDIT INTERNAL (amount, source ccy)\nDEBIT INTERNAL / CREDIT target (converted amount, target ccy)
+        end
+        note over db
+            Same triggers and constraints as in the one-time transfer:
+            balance update via trigger, chk_balance, FK on currency,
+            trg_ledger_balanced checked at COMMIT
+        end note
+        api -> db : UPDATE scheduled_transactions SET next_run_at = :new_next_run WHERE id = :order_id
+        api -> db : COMMIT
+        alt DB error on INSERT or COMMIT
+            db --> api : error
+            api -> db : ROLLBACK
+            api -> db : BEGIN; INSERT transactions (status = 'REJECTED', ...);\nUPDATE next_run_at = :new_next_run; COMMIT
+        else committed
+            db --> api : committed
+        end
     end
 end
 
-api --> worker : 200 OK {executedCount: N, skippedCount: M}
+api --> worker : 200 OK {executedCount, rejectedCount, hasMore}
+end
 @enduml
