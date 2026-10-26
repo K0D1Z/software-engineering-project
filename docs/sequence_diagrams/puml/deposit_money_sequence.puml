@@ -1,0 +1,86 @@
+@startuml
+title Deposit money
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 260
+
+actor "Customer" as customer
+participant "Customer Web App\n(React SPA)" as spa
+participant "Core Banking API\n(FastAPI)" as api
+database "PostgreSQL" as db
+
+customer -> spa : Selects an account on the Dashboard, clicks "Deposit" and enters amount and description
+spa -> spa : Validates the form (amount > 0, max 2 decimal places, description not empty)
+spa -> api : POST /accounts/{accountNumber}/deposits {amount, description}
+api -> api : Authenticates the token (signature, expiry) and reads user id
+
+alt invalid or missing token
+    api --> spa : 401 Unauthorized
+    spa --> customer : Redirects to login
+else token valid
+    api -> db : SELECT role, status FROM users WHERE id = :user_id
+    db --> api : role, status
+    alt status <> 'ACTIVE'
+        api --> spa : 403 Forbidden
+        spa --> customer : Shows "access denied"
+    else active user
+        api -> api : Validates the payload (amount > 0, max 2 decimal places, description not empty)
+        alt invalid payload
+            api --> spa : 422 Unprocessable Entity (validation errors)
+            spa --> customer : Shows validation errors
+        else payload valid
+            api -> db : SELECT id, user_id, status, currency_code, account_type FROM accounts\nWHERE account_number = :accountNumber
+            db --> api : account row (or no row)
+            alt account not found
+                api --> spa : 404 Not Found
+                spa --> customer : Shows error message
+            else not owned by user or account_type = 'INTERNAL'
+                api --> spa : 403 Forbidden
+                spa --> customer : Shows error message
+            else account status <> 'ACTIVE'
+                api --> spa : 422 Unprocessable Entity (account not active)
+                spa --> customer : Shows error message
+            else account is valid
+                api -> db : SELECT id FROM accounts\nWHERE account_type = 'INTERNAL' AND currency_code = :account_ccy
+                db --> api : INTERNAL account of this currency (or no row)
+                alt no INTERNAL account for the currency
+                    api --> spa : 500 Internal Server Error
+                    spa --> customer : Shows error message
+                else INTERNAL account found
+                    api -> db : BEGIN;\nSELECT id, status FROM accounts\nWHERE id IN (:accountId, :internalId)\nORDER BY id FOR UPDATE
+                    db --> api : both accounts locked (fixed order, no deadlocks)
+                    alt account no longer ACTIVE
+                        api -> db : ROLLBACK
+                        api --> spa : 422 Unprocessable Entity (account not active)
+                        spa --> customer : Shows error message
+                    else still ACTIVE
+                        api -> db : INSERT INTO transactions\n(id = uuid4(), reference_number, description, status = 'POSTED', initiated_by = :user_id)
+                        api -> db : INSERT INTO ledger (2 entries, id = uuid4() each):\nDEBIT INTERNAL (amount), CREDIT customer account (amount)
+                        note over db
+                            trg_ledger_apply_balance updates accounts.balance
+                            (allowed by accounts_balance_guard only at trigger depth 2);
+                            FK (account_id, currency_code) enforces each entry is in the account's currency;
+                            trg_ledger_balanced (DEFERRED) checks DEBIT = CREDIT per currency at COMMIT.
+                            The INTERNAL account is the bank's side of the deposit (its balance goes down, chk_balance does not apply to it).
+                        end note
+                        api -> db : SELECT balance FROM accounts WHERE id = :accountId
+                        db --> api : new balance
+                        api -> db : COMMIT
+                        alt DB error on INSERT or COMMIT
+                            db --> api : error
+                            api -> db : ROLLBACK
+                            api --> spa : 500 Internal Server Error
+                            spa --> customer : Shows error message
+                        else committed
+                            db --> api : committed
+                            api --> spa : 201 Created {transactionId, referenceNumber, newBalance}
+                            spa --> customer : Shows confirmation and the updated balance
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+@enduml
