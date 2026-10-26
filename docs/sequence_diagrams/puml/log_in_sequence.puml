@@ -1,0 +1,50 @@
+@startuml
+title Log in
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow false
+skinparam maxMessageSize 260
+
+actor "User\n(customer or administrator)" as user
+participant "Web App\n(React SPA)" as spa
+participant "Core Banking API\n(FastAPI)" as api
+database "PostgreSQL" as db
+
+user -> spa : Opens the login page and enters e-mail and password
+spa -> spa : Validates the form (e-mail format, password not empty)
+spa -> api : POST /auth/login {email, password}
+api -> api : Validates the payload (valid e-mail, password not empty)
+
+alt invalid payload
+    api --> spa : 422 Unprocessable Entity
+    spa --> user : Shows validation errors
+else payload valid
+    api -> db : SELECT id, password_hash, role, status FROM users\nWHERE email = :email
+    db --> api : user row (or no row)
+    api -> api : PasswordHasher.verify(raw_password, password_hash)\n(if there is no row, verifies against a dummy hash to keep the response time equal)
+    alt user not found or password incorrect
+        api --> spa : 401 Unauthorized {"Invalid e-mail or password"}
+        spa --> user : Shows the same generic error in both cases
+    else password correct
+        alt status <> 'ACTIVE' (PENDING / BLOCKED / DELETED)
+            api --> spa : 403 Forbidden {"Account is not active"}
+            spa --> user : Shows "account not active, contact the bank"
+        else status = 'ACTIVE'
+            api -> api : Creates a signed token (user id, role, expiry) using token_secret
+            api --> spa : 200 OK {accessToken, expiresIn, role}
+            spa -> spa : Keeps the token and sends it as "Authorization: Bearer {accessToken}" in later requests
+            alt role = 'ADMIN'
+                spa --> user : Redirects to the administrator panel
+            else role = 'CUSTOMER'
+                spa --> user : Redirects to the Dashboard (list of accounts)
+            end
+        end
+    end
+end
+
+note over api, db
+    Login only reads the database - no session row is stored.
+    Later requests are authenticated by the token signature and expiry;
+    the role and status are read from the users table again where an endpoint needs them.
+end note
+@enduml
