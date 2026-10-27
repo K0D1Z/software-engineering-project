@@ -123,7 +123,7 @@ ALTER TABLE "exchange_rates" ADD FOREIGN KEY ("target_currency") REFERENCES "cur
 
 ALTER TABLE "transactions" ADD FOREIGN KEY ("reverses_transaction_id") REFERENCES "transactions" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "transactions" ADD FOREIGN KEY ("initiated_by") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;  -- [CHANGE 2]
+ALTER TABLE "transactions" ADD FOREIGN KEY ("initiated_by") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "scheduled_transactions" ADD FOREIGN KEY ("source_account_id") REFERENCES "accounts" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
