@@ -70,13 +70,6 @@ else authenticated
                 else currencies differ (4 entries, balanced per currency)
                     api -> db : INSERT INTO ledger (4 entries, one transaction_id):\n1. DEBIT source (amount, source ccy)\n2. CREDIT INTERNAL (amount, source ccy)\n3. DEBIT INTERNAL (converted amount, target ccy)\n4. CREDIT recipient (converted amount, target ccy)
                 end
-                note over db
-                    trg_ledger_apply_balance updates accounts.balance
-                    (allowed by accounts_balance_guard only at trigger depth 2);
-                    CHECK chk_balance (not for INTERNAL) fails immediately on overdraft;
-                    FK (account_id, currency_code) enforces each entry is in the account's currency;
-                    trg_ledger_balanced (DEFERRED) checks DEBIT = CREDIT per currency at COMMIT
-                end note
                 api -> db : SELECT balance FROM accounts WHERE id = :sourceAccountId
                 db --> api : new balance
                 api -> db : COMMIT
